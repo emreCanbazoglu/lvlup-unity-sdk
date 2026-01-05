@@ -106,6 +106,9 @@ LvlUpManager.Instance.TrackEvent("level_complete", new Dictionary<string, object
     { "timeMs", 75000 }
 });
 
+// Or use LvlUpEvents helper for standard events - much cleaner!
+LvlUpEvents.TrackLevelComplete(5, 12500, 75f, 3);
+
 // Track multiple events in a batch
 var events = new List<LvlUpEvent>
 {
@@ -114,6 +117,26 @@ var events = new List<LvlUpEvent>
 };
 await LvlUpManager.Instance.TrackEventsBatch(events);
 ```
+
+### Standard Event Helpers (LvlUpEvents)
+
+The SDK provides a static `LvlUpEvents` helper class for common game events to ensure consistency:
+
+```csharp
+// Level start
+LvlUpEvents.TrackLevelStart(levelId);
+LvlUpEvents.TrackLevelStart(levelId, "Level Name", additionalProperties);
+
+// Level complete
+LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds);
+LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, stars, additionalProperties);
+
+// Level failed
+LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds);
+LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds, attempts, additionalProperties);
+```
+
+**Benefits:** Clean static API, consistent event structure, auto-timestamps, better analytics.
 
 ### 4. Track Player Journey
 

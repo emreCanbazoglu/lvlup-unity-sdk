@@ -76,11 +76,88 @@ public class BasicLvlUpIntegration : MonoBehaviour
     }
 
     /// <summary>
-    /// Example: Track level completion
+    /// Example: Track level start using helper method
+    /// Call this when a level begins
+    /// </summary>
+    public void OnLevelStart(int levelId)
+    {
+        // Using the standard helper method from LvlUpEvents
+        LvlUpEvents.TrackLevelStart(levelId);
+        
+        Debug.Log($"📍 Level {levelId} started");
+    }
+
+    /// <summary>
+    /// Example: Track level start with additional data
+    /// </summary>
+    public void OnLevelStart(int levelId, string levelName, string difficulty)
+    {
+        // Using helper method with additional properties
+        LvlUpEvents.TrackLevelStart(levelId, levelName, new Dictionary<string, object>
+        {
+            { "difficulty", difficulty },
+            { "previousBestScore", GetPreviousBestScore(levelId) }
+        });
+    }
+
+    /// <summary>
+    /// Example: Track level completion using helper method
     /// Call this when player completes a level
     /// </summary>
     public void OnLevelComplete(int levelId, int score, int stars, float timeSeconds)
     {
+        // Using the standard helper method with stars
+        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, stars);
+        
+        Debug.Log($"✅ Level {levelId} complete! Score: {score}, Stars: {stars}");
+    }
+
+    /// <summary>
+    /// Example: Track level completion with additional data
+    /// </summary>
+    public void OnLevelCompleteAdvanced(int levelId, int score, float timeSeconds, int stars)
+    {
+        // Using helper method with additional properties
+        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, stars, new Dictionary<string, object>
+        {
+            { "perfectCompletion", stars == 3 },
+            { "coinsCollected", GetCoinsCollected() },
+            { "enemiesDefeated", GetEnemiesDefeated() }
+        });
+    }
+
+    /// <summary>
+    /// Example: Track level failure using helper method
+    /// Call this when player fails a level
+    /// </summary>
+    public void OnLevelFailed(int levelId, string reason, float timeSeconds)
+    {
+        // Using the standard helper method
+        LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds);
+        
+        Debug.Log($"❌ Level {levelId} failed. Reason: {reason}");
+    }
+
+    /// <summary>
+    /// Example: Track level failure with attempts
+    /// </summary>
+    public void OnLevelFailedWithAttempts(int levelId, string reason, float timeSeconds, int attempts)
+    {
+        // Using helper method with attempts
+        LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds, attempts, new Dictionary<string, object>
+        {
+            { "healthRemaining", GetPlayerHealth() },
+            { "checkpointReached", GetLastCheckpoint() }
+        });
+    }
+
+    /// <summary>
+    /// Example: Track level completion (legacy method for comparison)
+    /// This shows the old way vs using the helper method
+    /// </summary>
+    public void OnLevelCompleteOldWay(int levelId, int score, int stars, float timeSeconds)
+    {
+        // Old way - manually creating properties with LvlUpManager
         var properties = new Dictionary<string, object>
         {
             { "levelId", levelId },
@@ -193,33 +270,40 @@ public class BasicLvlUpIntegration : MonoBehaviour
 
     #region Helper Methods
 
-    private string GetOrCreateUserId()
-    {
-        // Check if we have a saved user ID
-        string userId = PlayerPrefs.GetString("LvlUp_UserId", "");
-        
-        if (string.IsNullOrEmpty(userId))
-        {
-            // Generate a new unique user ID
-            userId = $"user_{System.Guid.NewGuid().ToString()}";
-            PlayerPrefs.SetString("LvlUp_UserId", userId);
-            PlayerPrefs.Save();
-        }
-        
-        return userId;
-    }
-
-    private string GetUserCountry()
-    {
-        // In production, you might use a geolocation API
-        // For now, return a default or use system locale
-        return "US";
-    }
-
     private int GetCurrentLevelId()
     {
         // Return current level ID from your game state
         return 1;
+    }
+
+    private int GetPreviousBestScore(int levelId)
+    {
+        // Return the player's best score for this level
+        return PlayerPrefs.GetInt($"BestScore_Level_{levelId}", 0);
+    }
+
+    private int GetCoinsCollected()
+    {
+        // Return coins collected in current level
+        return 0;
+    }
+
+    private int GetEnemiesDefeated()
+    {
+        // Return enemies defeated in current level
+        return 0;
+    }
+
+    private float GetPlayerHealth()
+    {
+        // Return player's remaining health
+        return 0f;
+    }
+
+    private int GetLastCheckpoint()
+    {
+        // Return last checkpoint reached
+        return 0;
     }
 
     #endregion

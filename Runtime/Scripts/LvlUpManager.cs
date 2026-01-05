@@ -164,7 +164,8 @@ namespace LvlUp
 
         #endregion
 
-        #region Session Management
+
+        #region Utility Methods
 
         /// <summary>
         /// Start a new session for a user

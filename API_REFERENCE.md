@@ -57,7 +57,7 @@ LvlUpManager.Initialize(
 
 ### Instance Methods
 
-#### Session Management
+#### Event Tracking
 
 ##### StartSession
 ```csharp
@@ -393,6 +393,55 @@ public class ApiResponse<T>
     public string message;
 }
 ```
+
+---
+
+## LvlUpEvents (Static Helper Class)
+
+Static helper class for tracking standard game events with consistent structure. Decoupled from LvlUpManager for cleaner API.
+
+### Static Methods
+
+#### TrackLevelStart
+```csharp
+public static void TrackLevelStart(int levelId, Dictionary<string, object> additionalProperties = null)
+public static void TrackLevelStart(int levelId, string levelName, Dictionary<string, object> additionalProperties = null)
+```
+Track when a player starts a level.
+
+**Example:**
+```csharp
+LvlUpEvents.TrackLevelStart(5);
+LvlUpEvents.TrackLevelStart(5, "Forest Battle", new Dictionary<string, object> { { "difficulty", "hard" } });
+```
+
+#### TrackLevelComplete
+```csharp
+public static void TrackLevelComplete(int levelId, int score, float timeSeconds, Dictionary<string, object> additionalProperties = null)
+public static void TrackLevelComplete(int levelId, int score, float timeSeconds, int stars, Dictionary<string, object> additionalProperties = null)
+```
+Track when a player completes a level.
+
+**Example:**
+```csharp
+LvlUpEvents.TrackLevelComplete(5, 12500, 125.5f);
+LvlUpEvents.TrackLevelComplete(5, 12500, 125.5f, 3);
+```
+
+#### TrackLevelFailed
+```csharp
+public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, Dictionary<string, object> additionalProperties = null)
+public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, Dictionary<string, object> additionalProperties = null)
+```
+Track when a player fails a level.
+
+**Example:**
+```csharp
+LvlUpEvents.TrackLevelFailed(5, "player_death", 45.2f);
+LvlUpEvents.TrackLevelFailed(5, "time_expired", 180f, 3);
+```
+
+**See STANDARD_EVENT_HELPERS.md for complete documentation.**
 
 ---
 
