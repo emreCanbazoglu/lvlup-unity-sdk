@@ -1,0 +1,112 @@
+# Changelog
+
+All notable changes to the LvlUp Unity SDK will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-01-05
+
+### Added
+- Initial release of LvlUp Unity SDK
+- Core analytics tracking functionality
+  - Session management with automatic lifecycle tracking
+  - Event tracking (single and batch)
+  - User metadata collection
+- Player Journey features
+  - Checkpoint creation and management
+  - Checkpoint progress tracking
+  - Journey analytics
+- AI Integration
+  - AI chat assistant for in-game help
+  - AI-powered analytics insights
+  - Context-aware recommendations
+- Offline support
+  - Automatic event queuing when offline
+  - Configurable batch sizes and flush intervals
+  - Persistent queue option
+- Configuration system
+  - Flexible SDK configuration
+  - Debug logging options
+  - Customizable batch and flush settings
+- Unity lifecycle integration
+  - Automatic session management
+  - App pause/resume tracking
+  - Scene change tracking (optional)
+- Error handling and retry logic
+- Comprehensive documentation
+  - Quick start guide
+  - Integration guide with examples
+  - API reference
+  - Best practices
+- Example scripts
+  - Basic integration example
+  - Player journey example
+  - AI integration example
+- Unity Package Manager support
+
+### Features
+- ✅ Session tracking with device info
+- ✅ Custom event tracking with properties
+- ✅ Batch event sending for efficiency
+- ✅ Player checkpoint system
+- ✅ AI chat integration
+- ✅ AI insights and recommendations
+- ✅ Offline event queuing
+- ✅ Automatic session lifecycle
+- ✅ Configurable SDK behavior
+- ✅ Debug logging
+- ✅ Unity 2019.4+ support
+- ✅ Cross-platform support (iOS, Android, PC, WebGL)
+
+### Supported Platforms
+- iOS
+- Android
+- Windows
+- macOS
+- Linux
+- WebGL
+
+### Requirements
+- Unity 2019.4 or later
+- .NET Standard 2.0 or higher
+
+## [Unreleased]
+
+### Planned Features
+- Remote configuration support
+- A/B testing integration
+- Advanced analytics dashboards
+- Push notification integration
+- User segmentation
+- Cohort analysis helpers
+- Custom event validation
+- Event schema definitions
+- Local analytics for offline games
+- Analytics data export
+- GDPR compliance helpers
+- User opt-out functionality
+
+---
+
+## Version History
+
+### Version Numbering
+- **Major** (X.0.0): Breaking changes, major new features
+- **Minor** (0.X.0): New features, non-breaking changes
+- **Patch** (0.0.X): Bug fixes, minor improvements
+
+### Migration Guides
+When upgrading between major versions, refer to the migration guide in the documentation.
+
+---
+
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for information on how to contribute to this project.
+
+## Support
+For questions, issues, or feature requests:
+- GitHub Issues: https://github.com/yourusername/lvlup-unity-sdk/issues
+- Email: support@lvlup.com
+- Discord: https://discord.gg/lvlup
+
