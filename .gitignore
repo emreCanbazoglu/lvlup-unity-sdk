@@ -7,10 +7,9 @@
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
 
-# Unity meta files
-*.pidb.meta
-*.pdb.meta
-*.mdb.meta
+# NOTE: .meta files are NOT ignored - they are required for Unity packages!
+# Unity will generate them if missing, but for version control and packages,
+# we need to track them to maintain consistent GUIDs
 
 # Unity3D generated file on crash reports
 sysinfo.txt

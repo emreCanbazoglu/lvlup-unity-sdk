@@ -19,7 +19,6 @@ The LvlUp Unity SDK has been successfully created and is ready to use. This docu
 #### **Examples/**
 - **BasicLvlUpIntegration.cs** - Basic event tracking example
 - **PlayerJourneyExample.cs** - Checkpoint and journey tracking example
-- **AIIntegrationExample.cs** - AI chat and insights example
 
 #### **Documentation**
 - **README.md** - Main SDK documentation with features and overview
@@ -175,18 +174,6 @@ LvlUpManager.Instance.CreateCheckpoint(
 LvlUpManager.Instance.RecordCheckpoint(checkpointId);
 ```
 
-### AI Features
-```csharp
-// Ask AI for help
-LvlUpManager.Instance.SendAIMessage(
-    "What should I do next?",
-    context: new Dictionary<string, object> { { "level", 5 } }
-);
-
-// Get insights
-LvlUpManager.Instance.GetAIInsights();
-```
-
 ---
 
 ## 🔧 Configuration Options
@@ -247,13 +234,7 @@ LvlUpManager.Initialize(apiKey, baseUrl, config);
    - [ ] Track tutorial progress
    - [ ] Track achievement unlocks
 
-5. **Advanced Features** (Optional)
-   - [ ] Integrate AI chat assistant
-   - [ ] Add AI insights to dashboard
-   - [ ] Implement personalized recommendations
-   - [ ] Add scene tracking
-
-6. **Testing**
+5. **Testing**
    - [ ] Enable debug logs
    - [ ] Verify events in console
    - [ ] Check dashboard for data
@@ -319,7 +300,6 @@ You should see:
 2. **Explore Examples**
    - Run BasicLvlUpIntegration.cs in a test scene
    - Try PlayerJourneyExample.cs for checkpoints
-   - Test AIIntegrationExample.cs for AI features
 
 3. **Customize for Your Game**
    - Define your key events

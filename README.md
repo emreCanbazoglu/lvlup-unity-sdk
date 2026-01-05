@@ -7,7 +7,6 @@ Official Unity SDK for the LvlUp Analytics Platform.
 - 📊 Session tracking with automatic lifecycle management
 - 🎯 Event tracking (single and batch)
 - 🗺️ Player journey and checkpoint tracking
-- 🤖 AI-powered analytics integration
 - 🔄 Automatic retry and queuing for offline support
 - 🎮 Easy Unity integration with singleton pattern
 - ⚡ Async/await support with Unity coroutines

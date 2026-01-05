@@ -47,14 +47,6 @@ LvlUpManager.Instance.RecordCheckpoint(checkpointId);
 LvlUpManager.Instance.GetPlayerJourneyProgress(callback);
 ```
 
-## AI
-```csharp
-// Chat
-LvlUpManager.Instance.SendAIMessage("question", context, callback);
-
-// Insights
-LvlUpManager.Instance.GetAIInsights(filters, callback);
-```
 
 ## Config
 ```csharp

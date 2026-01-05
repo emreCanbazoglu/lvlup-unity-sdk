@@ -114,13 +114,6 @@ LvlUpManager.Instance.CreateCheckpoint(
 LvlUpManager.Instance.RecordCheckpoint(checkpointId);
 ```
 
-### AI Chat Assistant
-```csharp
-LvlUpManager.Instance.SendAIMessage(
-    "What level should I play next?",
-    context: new Dictionary<string, object> { { "currentLevel", 5 } }
-);
-```
 
 ## Configuration Options
 

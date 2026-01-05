@@ -222,53 +222,6 @@ LvlUpManager.Instance.GetPlayerJourneyProgress(response =>
 });
 ```
 
-#### AI Features
-
-##### SendAIMessage
-```csharp
-public void SendAIMessage(string message, Dictionary<string, object> context = null, Action<ApiResponse<AIChatResponse>> callback = null)
-```
-Send a message to the AI assistant.
-
-**Parameters:**
-- `message` (string): User message
-- `context` (Dictionary<string, object>, optional): Additional context
-- `callback` (Action, optional): Callback with AI response
-
-**Example:**
-```csharp
-LvlUpManager.Instance.SendAIMessage("What level should I play next?", 
-    new Dictionary<string, object> { { "currentLevel", 5 } },
-    response =>
-    {
-        if (response.success)
-            Debug.Log($"AI: {response.data.message}");
-    }
-);
-```
-
-##### GetAIInsights
-```csharp
-public void GetAIInsights(Dictionary<string, object> filters = null, Action<ApiResponse<AIInsightsResponse>> callback = null)
-```
-Get AI-powered analytics insights.
-
-**Parameters:**
-- `filters` (Dictionary<string, object>, optional): Filter parameters
-- `callback` (Action, optional): Callback with insights
-
-**Example:**
-```csharp
-LvlUpManager.Instance.GetAIInsights(
-    new Dictionary<string, object> { { "timeframe", "7d" } },
-    response =>
-    {
-        if (response.success)
-            Debug.Log($"Insights: {response.data.summary}");
-    }
-);
-```
-
 #### Utility Methods
 
 ##### IsInitialized
@@ -406,27 +359,6 @@ public class PlayerJourneyProgress
 }
 ```
 
-### AIChatResponse
-```csharp
-public class AIChatResponse
-{
-    public string message;
-    public string conversationId;
-    public string timestamp;
-    public Dictionary<string, object> metadata;
-}
-```
-
-### AIInsightsResponse
-```csharp
-public class AIInsightsResponse
-{
-    public string summary;
-    public Insight[] insights;
-    public Dictionary<string, object> recommendations;
-    public string timestamp;
-}
-```
 
 ### ApiResponse<T>
 ```csharp
