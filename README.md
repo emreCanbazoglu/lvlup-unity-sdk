@@ -46,20 +46,41 @@ public class GameInitializer : MonoBehaviour
         // Initialize with your API key and backend URL
         LvlUpManager.Initialize(
             apiKey: "lvl_your_api_key_here",
-            baseUrl: "https://your-backend-url.com/api"
+            baseUrl: "https://your-backend-url.com/api",
+            config: null,
+            onComplete: (success, message) =>
+            {
+                if (success)
+                {
+                    Debug.Log($"✅ LvlUp SDK Ready: {message}");
+                }
+                else
+                {
+                    Debug.LogError($"❌ LvlUp Init Failed: {message}");
+                }
+            }
         );
-        
-        Debug.Log("LvlUp SDK Initialized!");
     }
 }
 ```
 
+**Note:** With `autoTrackSessions = true` (default), sessions start automatically. The callback fires when the SDK and session are ready.
+
 ### 2. Track Sessions
 
-Sessions are tracked automatically, but you can manually control them:
+Sessions are tracked automatically by default, but you can manually control them:
 
 ```csharp
-// Start a session (usually automatic)
+// Sessions start automatically when you Initialize (if autoTrackSessions = true)
+LvlUpManager.Initialize(apiKey, baseUrl, null, (success, message) =>
+{
+    if (success)
+    {
+        Debug.Log("Session started automatically!");
+    }
+});
+
+// Or manually start a session (if autoTrackSessions = false)
 await LvlUpManager.Instance.StartSession("user_12345", new UserMetadata
 {
     deviceId = SystemInfo.deviceUniqueIdentifier,
@@ -69,7 +90,7 @@ await LvlUpManager.Instance.StartSession("user_12345", new UserMetadata
     language = Application.systemLanguage.ToString()
 });
 
-// End session (automatic on application quit/pause)
+// End session (automatic on application quit)
 await LvlUpManager.Instance.EndSession();
 ```
 

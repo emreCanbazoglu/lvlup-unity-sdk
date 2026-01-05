@@ -31,18 +31,36 @@ public class GameManager : MonoBehaviour
 {
     void Start()
     {
-        // Initialize LvlUp
+        // Initialize LvlUp with callback
         LvlUpManager.Initialize(
             apiKey: "lvl_your_api_key_here",
-            baseUrl: "https://your-backend.com/api"
+            baseUrl: "https://your-backend.com/api",
+            config: null,
+            onComplete: (success, message) =>
+            {
+                if (success)
+                {
+                    Debug.Log($"✅ LvlUp Ready: {message}");
+                    // SDK is ready - start tracking events
+                    OnSdkReady();
+                }
+                else
+                {
+                    Debug.LogError($"❌ Failed: {message}");
+                }
+            }
         );
+    }
 
-        // Start tracking user session
-        string userId = SystemInfo.deviceUniqueIdentifier;
-        LvlUpManager.Instance.StartSession(userId);
+    void OnSdkReady()
+    {
+        // Start tracking your game events here
+        LvlUpManager.Instance.TrackEvent("game_started", null);
     }
 }
 ```
+
+**Note:** Sessions start automatically! The callback tells you when everything is ready.
 
 ### Step 3: Track Your First Event
 

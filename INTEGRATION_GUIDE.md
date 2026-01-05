@@ -30,28 +30,36 @@ public class YourGameManager : MonoBehaviour
 
     private void InitializeLvlUp()
     {
+        // Initialize with callback to know when ready
         LvlUpManager.Initialize(
             apiKey: "YOUR_API_KEY",
-            baseUrl: "YOUR_BACKEND_URL"
+            baseUrl: "YOUR_BACKEND_URL",
+            config: null,
+            onComplete: (success, message) =>
+            {
+                if (success)
+                {
+                    Debug.Log($"✅ LvlUp Initialized: {message}");
+                    // SDK is ready - you can start tracking events now
+                    OnLvlUpReady();
+                }
+                else
+                {
+                    Debug.LogError($"❌ LvlUp Initialization Failed: {message}");
+                }
+            }
         );
-
-        // Start session with user ID
-        string userId = GetOrCreateUserId();
-        LvlUpManager.Instance.StartSession(userId);
     }
 
-    private string GetOrCreateUserId()
+    private void OnLvlUpReady()
     {
-        string userId = PlayerPrefs.GetString("UserId", "");
-        if (string.IsNullOrEmpty(userId))
-        {
-            userId = $"user_{System.Guid.NewGuid()}";
-            PlayerPrefs.SetString("UserId", userId);
-        }
-        return userId;
+        // SDK is ready - start tracking your game
+        Debug.Log("LvlUp SDK is ready to track events!");
     }
 }
 ```
+
+**Note:** With `autoTrackSessions = true` (default), the callback fires after the session is automatically started. With manual session mode, it fires immediately after initialization.
 
 ### 3. Track Key Game Events
 
@@ -327,22 +335,39 @@ public class MinimalLvlUpIntegration : MonoBehaviour
 {
     void Start()
     {
-        // 1. Initialize
-        LvlUpManager.Initialize("YOUR_API_KEY", "YOUR_BACKEND_URL");
-        
-        // 2. Start session
-        LvlUpManager.Instance.StartSession(SystemInfo.deviceUniqueIdentifier);
+        // Initialize with callback
+        LvlUpManager.Initialize(
+            apiKey: "YOUR_API_KEY",
+            baseUrl: "YOUR_BACKEND_URL",
+            config: null,
+            onComplete: (success, message) =>
+            {
+                if (success)
+                {
+                    Debug.Log($"✅ LvlUp Ready: {message}");
+                    // Start tracking your game events
+                    TrackGameEvent("game_started", null);
+                }
+                else
+                {
+                    Debug.LogError($"❌ LvlUp Failed: {message}");
+                }
+            }
+        );
     }
 
-    // 3. Track events wherever needed in your game
+    // Track events wherever needed in your game
     public void TrackGameEvent(string eventName, Dictionary<string, object> data = null)
     {
-        LvlUpManager.Instance.TrackEvent(eventName, data);
+        if (LvlUpManager.Instance.IsInitialized())
+        {
+            LvlUpManager.Instance.TrackEvent(eventName, data);
+        }
     }
 
     void OnApplicationQuit()
     {
-        // 4. Clean up
+        // Clean up
         LvlUpManager.Instance.FlushEventQueue();
         LvlUpManager.Instance.EndSession();
     }

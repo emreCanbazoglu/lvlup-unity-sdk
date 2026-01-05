@@ -22,7 +22,6 @@ public class BasicLvlUpIntegration : MonoBehaviour
     private void Start()
     {
         InitializeLvlUp();
-        StartGameSession();
     }
 
     /// <summary>
@@ -41,41 +40,38 @@ public class BasicLvlUpIntegration : MonoBehaviour
             sendImmediately = false
         };
 
-        // Initialize SDK
-        LvlUpManager.Initialize(apiKey, backendUrl, config);
-        
-        Debug.Log("✅ LvlUp SDK Initialized!");
+        // Initialize SDK with callback
+        LvlUpManager.Initialize(
+            apiKey: apiKey,
+            baseUrl: backendUrl,
+            config: config,
+            onComplete: (success, message) =>
+            {
+                if (success)
+                {
+                    Debug.Log($"✅ LvlUp SDK Ready: {message}");
+                    OnLvlUpReady();
+                }
+                else
+                {
+                    Debug.LogError($"❌ LvlUp Initialization Failed: {message}");
+                }
+            }
+        );
     }
 
     /// <summary>
-    /// Start a session for the player
+    /// Called when LvlUp SDK is ready to use
     /// </summary>
-    private void StartGameSession()
+    private void OnLvlUpReady()
     {
-        // Generate or retrieve user ID (you might get this from your auth system)
-        string userId = GetOrCreateUserId();
-
-        // Create user metadata
-        var metadata = new UserMetadata
+        Debug.Log("LvlUp SDK initialized and ready to track events!");
+        
+        // Example: Track game start event
+        TrackEvent("game_started", new Dictionary<string, object>
         {
-            deviceId = SystemInfo.deviceUniqueIdentifier,
-            platform = Application.platform.ToString(),
-            version = Application.version,
-            country = GetUserCountry(), // You might use a geolocation service
-            language = Application.systemLanguage.ToString()
-        };
-
-        // Start session
-        LvlUpManager.Instance.StartSession(userId, metadata, response =>
-        {
-            if (response.success)
-            {
-                Debug.Log($"✅ Session started successfully! Session ID: {response.data.sessionId}");
-            }
-            else
-            {
-                Debug.LogError($"❌ Failed to start session: {response.error}");
-            }
+            { "platform", Application.platform.ToString() },
+            { "version", Application.version }
         });
     }
 

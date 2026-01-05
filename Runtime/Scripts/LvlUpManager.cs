@@ -53,16 +53,21 @@ namespace LvlUp
         /// <summary>
         /// Initialize the LvlUp SDK
         /// </summary>
-        public static void Initialize(string apiKey, string baseUrl, LvlUpConfig config = null)
+        /// <param name="apiKey">Your LvlUp API key</param>
+        /// <param name="baseUrl">Backend API URL</param>
+        /// <param name="config">Optional configuration</param>
+        /// <param name="onComplete">Callback when initialization completes</param>
+        public static void Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
         {
-            Instance._Initialize(apiKey, baseUrl, config);
+            Instance._Initialize(apiKey, baseUrl, config, onComplete);
         }
 
-        private void _Initialize(string apiKey, string baseUrl, LvlUpConfig config = null)
+        private void _Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
         {
             if (_isInitialized)
             {
                 Debug.LogWarning("[LvlUp] SDK already initialized");
+                onComplete?.Invoke(false, "SDK already initialized");
                 return;
             }
 
@@ -80,6 +85,34 @@ namespace LvlUp
             // Start automatic flush coroutine
             if (!_config.sendImmediately)
                 StartCoroutine(AutoFlushCoroutine());
+
+            // Auto-start session if enabled
+            if (_config.autoTrackSessions)
+            {
+                // Generate or retrieve user ID
+                string autoUserId = GetOrCreateAutoUserId();
+                StartSession(autoUserId, null, response =>
+                {
+                    if (_config.enableDebugLogs)
+                    {
+                        if (response.success)
+                            Debug.Log($"[LvlUp] Auto-started session for user: {autoUserId}");
+                        else
+                            Debug.LogWarning($"[LvlUp] Failed to auto-start session: {response.error}");
+                    }
+                    
+                    // Invoke initialization complete callback
+                    if (response.success)
+                        onComplete?.Invoke(true, $"Initialized and session started for user: {autoUserId}");
+                    else
+                        onComplete?.Invoke(false, $"Initialized but session failed: {response.error}");
+                });
+            }
+            else
+            {
+                // No auto session - initialization is complete immediately
+                onComplete?.Invoke(true, "Initialized successfully (manual session mode)");
+            }
         }
 
         private void Awake()

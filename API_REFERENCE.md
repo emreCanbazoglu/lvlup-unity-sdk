@@ -18,7 +18,7 @@ Main singleton class for interacting with the LvlUp SDK.
 
 #### Initialize
 ```csharp
-public static void Initialize(string apiKey, string baseUrl, LvlUpConfig config = null)
+public static void Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
 ```
 Initialize the LvlUp SDK with your API credentials.
 
@@ -26,10 +26,33 @@ Initialize the LvlUp SDK with your API credentials.
 - `apiKey` (string): Your game's API key from LvlUp dashboard
 - `baseUrl` (string): Backend API URL (e.g., "https://api.lvlup.com/api")
 - `config` (LvlUpConfig, optional): Custom configuration options
+- `onComplete` (Action<bool, string>, optional): Callback when initialization completes
+  - First parameter (bool): `true` if successful, `false` if failed
+  - Second parameter (string): Success/error message
+
+**Callback Behavior:**
+- With `autoTrackSessions = true` (default): Fires after session starts
+- With `autoTrackSessions = false`: Fires immediately after initialization
 
 **Example:**
 ```csharp
-LvlUpManager.Initialize("lvl_your_api_key", "https://api.lvlup.com/api");
+LvlUpManager.Initialize(
+    apiKey: "lvl_your_api_key",
+    baseUrl: "https://api.lvlup.com/api",
+    config: null,
+    onComplete: (success, message) =>
+    {
+        if (success)
+        {
+            Debug.Log($"✅ SDK Ready: {message}");
+            // Start tracking events
+        }
+        else
+        {
+            Debug.LogError($"❌ Init Failed: {message}");
+        }
+    }
+);
 ```
 
 ### Instance Methods
