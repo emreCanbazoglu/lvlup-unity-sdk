@@ -68,7 +68,7 @@ public class BasicLvlUpIntegration : MonoBehaviour
         Debug.Log("LvlUp SDK initialized and ready to track events!");
         
         // Example: Track game start event
-        TrackEvent("game_started", new Dictionary<string, object>
+        LvlUpManager.Instance.TrackEvent("game_started", new Dictionary<string, object>
         {
             { "platform", Application.platform.ToString() },
             { "version", Application.version }
