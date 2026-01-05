@@ -524,6 +524,33 @@ namespace LvlUp
             return _currentUserId;
         }
 
+        /// <summary>
+        /// Get or create a persistent user ID for auto-tracking
+        /// </summary>
+        private string GetOrCreateAutoUserId()
+        {
+            const string USER_ID_KEY = "LvlUp_AutoUserId";
+            
+            string userId = PlayerPrefs.GetString(USER_ID_KEY, "");
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                // Generate a new unique user ID using device identifier
+                userId = SystemInfo.deviceUniqueIdentifier;
+                
+                // If device identifier is not available, generate a GUID
+                if (string.IsNullOrEmpty(userId) || userId == SystemInfo.unsupportedIdentifier)
+                {
+                    userId = $"auto_{System.Guid.NewGuid().ToString()}";
+                }
+                
+                PlayerPrefs.SetString(USER_ID_KEY, userId);
+                PlayerPrefs.Save();
+            }
+            
+            return userId;
+        }
+
         #endregion
     }
 }
