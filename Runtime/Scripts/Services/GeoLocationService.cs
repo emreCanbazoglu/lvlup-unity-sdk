@@ -7,11 +7,11 @@ namespace LvlUp.Services
 {
     /// <summary>
     /// Service for fetching geographic location information using IP geolocation
-    /// Uses ipapi.co free API (no API key required for basic usage)
+    /// Uses ip-api.com free API (no API key required, reliable service)
     /// </summary>
     public class GeoLocationService
     {
-        private const string GEO_API_URL = "https://ipapi.co/json/";
+        private const string GEO_API_URL = "http://ip-api.com/json/?fields=status,country,countryCode,region,city,lat,lon,timezone";
         private const float CACHE_DURATION = 3600f; // Cache for 1 hour
         
         private GeoData _cachedGeoData;
@@ -80,7 +80,7 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Parse JSON response from ipapi.co
+        /// Parse JSON response from ip-api.com
         /// </summary>
         private GeoData ParseGeoData(string json)
         {
@@ -89,15 +89,23 @@ namespace LvlUp.Services
 
             try
             {
-                // Extract fields from JSON string
-                geoData.country = ExtractJsonValue(json, "country_name");
-                geoData.countryCode = ExtractJsonValue(json, "country_code");
+                // Check if request was successful
+                string status = ExtractJsonValue(json, "status");
+                if (status != "success")
+                {
+                    Debug.LogWarning($"[LvlUp] Geo API returned status: {status}");
+                    return geoData;
+                }
+
+                // Extract fields from JSON string (ip-api.com format)
+                geoData.country = ExtractJsonValue(json, "country");
+                geoData.countryCode = ExtractJsonValue(json, "countryCode");
                 geoData.region = ExtractJsonValue(json, "region");
                 geoData.city = ExtractJsonValue(json, "city");
                 geoData.timezone = ExtractJsonValue(json, "timezone");
                 
-                string latStr = ExtractJsonValue(json, "latitude");
-                string lonStr = ExtractJsonValue(json, "longitude");
+                string latStr = ExtractJsonValue(json, "lat");
+                string lonStr = ExtractJsonValue(json, "lon");
                 
                 if (float.TryParse(latStr, System.Globalization.NumberStyles.Float, 
                     System.Globalization.CultureInfo.InvariantCulture, out float lat))
