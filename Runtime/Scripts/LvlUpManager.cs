@@ -38,6 +38,7 @@ namespace LvlUp
         private SessionData _currentSession;
         private string _currentUserId;
         private UserMetadata _currentUserMetadata;
+        private int _sessionNumber = 0;
 
         // Event queue for offline support
         private Queue<LvlUpEvent> _eventQueue = new Queue<LvlUpEvent>();
@@ -47,6 +48,9 @@ namespace LvlUp
         // State
         private bool _isInitialized = false;
         private bool _isSendingEvents = false;
+        
+        // PlayerPrefs keys for persistence
+        private const string PREF_SESSION_NUMBER = "LvlUp_SessionNumber";
 
         #region Initialization
 
@@ -181,6 +185,11 @@ namespace LvlUp
 
             _currentUserId = userId;
             _currentUserMetadata = metadata ?? new UserMetadata();
+            
+            // Increment session number
+            _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
+            PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
+            PlayerPrefs.Save();
 
             var request = new SessionStartRequest
             {
@@ -261,6 +270,10 @@ namespace LvlUp
             }
 
             var lvlUpEvent = new LvlUpEvent(eventName, properties);
+            
+            // Add session number if available
+            if (_sessionNumber > 0)
+                lvlUpEvent.sessionNum = _sessionNumber;
 
             if (_config.sendImmediately)
             {
