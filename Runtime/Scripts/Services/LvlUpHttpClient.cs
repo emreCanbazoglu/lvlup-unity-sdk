@@ -5,6 +5,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 using LvlUp.Models;
+using LvlUp.Utils;
 
 namespace LvlUp.Services
 {
@@ -55,7 +56,7 @@ namespace LvlUp.Services
         public IEnumerator Post<T>(string endpoint, object body, Action<ApiResponse<T>> callback)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            string jsonBody = JsonUtility.ToJson(body);
+            string jsonBody = SimpleJson.ToJson(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] POST {url}\nBody: {jsonBody}");
@@ -82,7 +83,7 @@ namespace LvlUp.Services
         public IEnumerator Put<T>(string endpoint, object body, Action<ApiResponse<T>> callback)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            string jsonBody = JsonUtility.ToJson(body);
+            string jsonBody = SimpleJson.ToJson(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] PUT {url}\nBody: {jsonBody}");

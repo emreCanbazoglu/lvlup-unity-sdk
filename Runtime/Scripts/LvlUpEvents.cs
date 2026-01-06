@@ -20,7 +20,6 @@ namespace LvlUp
             var properties = new Dictionary<string, object>
             {
                 { "levelId", levelId },
-                { "timestamp", DateTime.UtcNow.ToString("o") }
             };
 
             MergeProperties(properties, additionalProperties);
@@ -39,7 +38,6 @@ namespace LvlUp
             {
                 { "levelId", levelId },
                 { "levelName", levelName },
-                { "timestamp", DateTime.UtcNow.ToString("o") }
             };
 
             MergeProperties(properties, additionalProperties);
@@ -60,7 +58,6 @@ namespace LvlUp
                 { "levelId", levelId },
                 { "score", score },
                 { "timeSeconds", timeSeconds },
-                { "timestamp", DateTime.UtcNow.ToString("o") }
             };
 
             MergeProperties(properties, additionalProperties);
@@ -83,7 +80,6 @@ namespace LvlUp
                 { "score", score },
                 { "timeSeconds", timeSeconds },
                 { "stars", stars },
-                { "timestamp", DateTime.UtcNow.ToString("o") }
             };
 
             MergeProperties(properties, additionalProperties);
@@ -104,7 +100,6 @@ namespace LvlUp
                 { "levelId", levelId },
                 { "reason", reason },
                 { "timeSeconds", timeSeconds },
-                { "timestamp", DateTime.UtcNow.ToString("o") }
             };
 
             MergeProperties(properties, additionalProperties);
@@ -127,7 +122,6 @@ namespace LvlUp
                 { "reason", reason },
                 { "timeSeconds", timeSeconds },
                 { "attempts", attempts },
-                { "timestamp", DateTime.UtcNow.ToString("o") }
             };
 
             MergeProperties(properties, additionalProperties);

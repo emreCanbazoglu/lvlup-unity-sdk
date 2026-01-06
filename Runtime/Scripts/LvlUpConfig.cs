@@ -51,6 +51,12 @@ namespace LvlUp
         public bool autoTrackAppLifecycle = true;
 
         /// <summary>
+        /// Enable automatic geographic location tracking using IP geolocation
+        /// Fetches location data on initialization and caches for 1 hour
+        /// </summary>
+        public bool enableGeoTracking = false;
+
+        /// <summary>
         /// Track Unity scenes automatically
         /// </summary>
         public bool autoTrackScenes = false;

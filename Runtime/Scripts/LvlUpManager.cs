@@ -31,6 +31,7 @@ namespace LvlUp
         // Configuration
         private LvlUpConfig _config;
         private LvlUpHttpClient _httpClient;
+        private GeoLocationService _geoService;
         private string _apiKey;
         private string _baseUrl;
 
@@ -39,6 +40,9 @@ namespace LvlUp
         private string _currentUserId;
         private UserMetadata _currentUserMetadata;
         private int _sessionNumber = 0;
+        
+        // Cached geo data
+        private GeoData _cachedGeoData;
 
         // Event queue for offline support
         private Queue<LvlUpEvent> _eventQueue = new Queue<LvlUpEvent>();
@@ -80,11 +84,18 @@ namespace LvlUp
             _config = config ?? new LvlUpConfig();
 
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
+            _geoService = new GeoLocationService();
             _isInitialized = true;
             _lastFlushTime = Time.time;
 
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] SDK Initialized - Base URL: {_baseUrl}");
+            
+            // Optionally fetch geo data at initialization (async, non-blocking)
+            if (_config.enableGeoTracking)
+            {
+                StartCoroutine(FetchGeoLocationAsync());
+            }
 
             // Start automatic flush coroutine
             if (!_config.sendImmediately)
@@ -198,10 +209,11 @@ namespace LvlUp
                 platform = _currentUserMetadata.platform ?? Application.platform.ToString(),
                 version = _currentUserMetadata.version ?? Application.version,
                 country = _currentUserMetadata.country ?? "Unknown",
-                language = _currentUserMetadata.language ?? Application.systemLanguage.ToString()
+                language = _currentUserMetadata.language ?? Application.systemLanguage.ToString(),
+                startTime = DateTime.UtcNow.ToString("o")  // ISO 8601 format
             };
 
-            StartCoroutine(_httpClient.Post<SessionData>("analytics/session/start", request, response =>
+            StartCoroutine(_httpClient.Post<SessionData>("analytics/sessions", request, response =>
             {
                 if (response.success)
                 {
@@ -226,10 +238,11 @@ namespace LvlUp
 
             var request = new SessionEndRequest
             {
-                sessionId = _currentSession.sessionId
+                sessionId = _currentSession.sessionId,
+                endTime = DateTime.UtcNow.ToString("o")  // ISO 8601 format
             };
 
-            StartCoroutine(_httpClient.Put<SessionData>("analytics/session/end", request, response =>
+            StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{_currentSession.sessionId}", request, response =>
             {
                 if (response.success)
                 {
@@ -255,6 +268,72 @@ namespace LvlUp
 
         #endregion
 
+        #region Geographic Location
+
+        /// <summary>
+        /// Fetch geographic location data asynchronously
+        /// </summary>
+        private IEnumerator FetchGeoLocationAsync()
+        {
+            yield return _geoService.FetchGeoLocation(
+                onSuccess: (geoData) =>
+                {
+                    _cachedGeoData = geoData;
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Geo location fetched: {geoData.city}, {geoData.region}, {geoData.country}");
+                },
+                onError: (error) =>
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Failed to fetch geo location: {error}");
+                }
+            );
+        }
+
+        /// <summary>
+        /// Manually trigger geo location fetch (public API)
+        /// </summary>
+        public void RefreshGeoLocation(Action<GeoData> onSuccess = null, Action<string> onError = null)
+        {
+            StartCoroutine(_geoService.FetchGeoLocation(
+                onSuccess: (geoData) =>
+                {
+                    _cachedGeoData = geoData;
+                    onSuccess?.Invoke(geoData);
+                },
+                onError: onError
+            ));
+        }
+
+        /// <summary>
+        /// Get current cached geo data
+        /// </summary>
+        public GeoData GetCachedGeoData()
+        {
+            return _cachedGeoData;
+        }
+
+        /// <summary>
+        /// Apply cached geo data to an event
+        /// </summary>
+        private void ApplyGeoDataToEvent(LvlUpEvent evt)
+        {
+            if (_cachedGeoData != null && _cachedGeoData.IsValid())
+            {
+                evt.SetGeoLocation(
+                    _cachedGeoData.country,
+                    _cachedGeoData.countryCode,
+                    _cachedGeoData.region,
+                    _cachedGeoData.city,
+                    _cachedGeoData.latitude,
+                    _cachedGeoData.longitude,
+                    _cachedGeoData.timezone
+                );
+            }
+        }
+
+        #endregion
+
         #region Event Tracking
 
         /// <summary>
@@ -274,6 +353,10 @@ namespace LvlUp
             // Add session number if available
             if (_sessionNumber > 0)
                 lvlUpEvent.sessionNum = _sessionNumber;
+            
+            // Apply cached geo data if available
+            if (_config.enableGeoTracking)
+                ApplyGeoDataToEvent(lvlUpEvent);
 
             if (_config.sendImmediately)
             {
@@ -321,6 +404,7 @@ namespace LvlUp
                 events = new List<EventDataItem>(),
                 deviceInfo = new DeviceInfo
                 {
+                    // Only core fields - all extended metadata is in event-level data
                     platform = _currentUserMetadata?.platform ?? Application.platform.ToString(),
                     version = _currentUserMetadata?.version ?? Application.version,
                     deviceId = _currentUserMetadata?.deviceId ?? SystemInfo.deviceUniqueIdentifier
@@ -329,12 +413,8 @@ namespace LvlUp
 
             foreach (var evt in events)
             {
-                batchRequest.events.Add(new EventDataItem
-                {
-                    eventName = evt.eventName,
-                    properties = evt.properties,
-                    timestamp = evt.timestamp
-                });
+                // Use the conversion method - much cleaner!
+                batchRequest.events.Add(evt.ToEventDataItem());
             }
 
             StartCoroutine(_httpClient.Post<object>("analytics/events/batch", batchRequest, response =>
