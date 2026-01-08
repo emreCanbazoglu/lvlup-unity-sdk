@@ -1,0 +1,374 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using UnityEngine;
+
+namespace LvlUp.Services
+{
+    /// <summary>
+    /// Crash and exception reporting service
+    /// Automatically captures unhandled exceptions and provides manual crash reporting
+    /// </summary>
+    public class CrashReporter
+    {
+        private readonly LvlUpHttpClient _httpClient;
+        private readonly string _gameId;
+        private readonly string _userId;
+        private readonly string _sessionId;
+        private readonly Queue<CrashReport> _crashQueue = new Queue<CrashReport>();
+        private bool _isEnabled = true;
+        private bool _autoCapture = true;
+        private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
+        private const int MAX_BREADCRUMBS = 50;
+
+        public CrashReporter(LvlUpHttpClient httpClient, string gameId, string userId = null, string sessionId = null)
+        {
+            _httpClient = httpClient;
+            _gameId = gameId;
+            _userId = userId;
+            _sessionId = sessionId;
+        }
+
+        /// <summary>
+        /// Enable or disable crash reporting
+        /// </summary>
+        public void SetEnabled(bool enabled)
+        {
+            _isEnabled = enabled;
+            
+            if (enabled && _autoCapture)
+            {
+                RegisterExceptionHandlers();
+            }
+            else if (!enabled)
+            {
+                UnregisterExceptionHandlers();
+            }
+        }
+
+        /// <summary>
+        /// Enable or disable automatic exception capture
+        /// </summary>
+        public void SetAutoCapture(bool autoCapture)
+        {
+            _autoCapture = autoCapture;
+            
+            if (_isEnabled)
+            {
+                if (autoCapture)
+                {
+                    RegisterExceptionHandlers();
+                }
+                else
+                {
+                    UnregisterExceptionHandlers();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Register Unity exception handlers
+        /// </summary>
+        private void RegisterExceptionHandlers()
+        {
+            Application.logMessageReceived += HandleLogMessage;
+        }
+
+        /// <summary>
+        /// Unregister Unity exception handlers
+        /// </summary>
+        private void UnregisterExceptionHandlers()
+        {
+            Application.logMessageReceived -= HandleLogMessage;
+        }
+
+        /// <summary>
+        /// Handle Unity log messages and capture exceptions/errors
+        /// </summary>
+        private void HandleLogMessage(string condition, string stackTrace, LogType type)
+        {
+            if (!_isEnabled) return;
+
+            // Add breadcrumb for all log types
+            AddBreadcrumb($"{type}: {condition}", BreadcrumbType.Log);
+
+            // Only report exceptions and errors
+            if (type == LogType.Exception || type == LogType.Error)
+            {
+                string severity = type == LogType.Exception ? "ERROR" : "HIGH";
+                string crashType = type == LogType.Exception ? "exception" : "error";
+                
+                ReportCrash(
+                    crashType: crashType,
+                    severity: severity,
+                    message: condition,
+                    stackTrace: stackTrace,
+                    exceptionType: ExtractExceptionType(condition)
+                );
+            }
+        }
+
+        /// <summary>
+        /// Extract exception type from error message
+        /// </summary>
+        private string ExtractExceptionType(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return "UnknownException";
+
+            // Try to extract exception type (e.g., "NullReferenceException: Object reference...")
+            int colonIndex = message.IndexOf(':');
+            if (colonIndex > 0 && colonIndex < 100)
+            {
+                return message.Substring(0, colonIndex).Trim();
+            }
+
+            return "UnknownException";
+        }
+
+        /// <summary>
+        /// Add a breadcrumb to track user actions leading to crashes
+        /// </summary>
+        public void AddBreadcrumb(string message, BreadcrumbType type = BreadcrumbType.Navigation, Dictionary<string, object> data = null)
+        {
+            var breadcrumb = new Breadcrumb
+            {
+                Timestamp = DateTime.UtcNow,
+                Message = message,
+                Type = type.ToString(),
+                Data = data
+            };
+
+            _breadcrumbs.Add(breadcrumb);
+
+            // Keep only last MAX_BREADCRUMBS
+            if (_breadcrumbs.Count > MAX_BREADCRUMBS)
+            {
+                _breadcrumbs.RemoveAt(0);
+            }
+        }
+
+        /// <summary>
+        /// Manually report a crash or exception
+        /// </summary>
+        public void ReportCrash(
+            string crashType,
+            string severity,
+            string message,
+            string stackTrace,
+            string exceptionType = null,
+            Dictionary<string, object> customData = null)
+        {
+            if (!_isEnabled) return;
+
+            try
+            {
+                var report = new CrashReport
+                {
+                    GameId = _gameId,
+                    UserId = _userId,
+                    SessionId = _sessionId,
+                    CrashType = crashType,
+                    Severity = severity,
+                    Message = message,
+                    StackTrace = stackTrace,
+                    ExceptionType = exceptionType ?? "UnknownException",
+                    
+                    // Device & Platform info
+                    Platform = GetPlatform(),
+                    OsVersion = SystemInfo.operatingSystem,
+                    Manufacturer = SystemInfo.deviceModel.Split(' ')[0],
+                    Device = SystemInfo.deviceModel,
+                    DeviceId = SystemInfo.deviceUniqueIdentifier,
+                    
+                    // App info
+                    AppVersion = Application.version,
+                    BundleId = Application.identifier,
+                    EngineVersion = $"unity {Application.unityVersion}",
+                    SdkVersion = "unity 1.0.0",
+                    
+                    // System info
+                    MemoryUsage = (long)UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong(),
+                    BatteryLevel = SystemInfo.batteryLevel,
+                    
+                    // Context
+                    Breadcrumbs = new List<Breadcrumb>(_breadcrumbs),
+                    CustomData = customData,
+                    
+                    Timestamp = DateTime.UtcNow
+                };
+
+                _crashQueue.Enqueue(report);
+                
+                // Send immediately for high priority crashes
+                if (severity == "CRITICAL" || severity == "HIGH")
+                {
+                    SendCrashReports();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to create crash report: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Send all queued crash reports to the backend
+        /// </summary>
+        public void SendCrashReports()
+        {
+            if (_crashQueue.Count == 0) return;
+
+            while (_crashQueue.Count > 0)
+            {
+                var report = _crashQueue.Dequeue();
+                
+                try
+                {
+                    string json = JsonUtility.ToJson(report);
+                    string endpoint = $"/games/{_gameId}/crashes";
+                    
+                    _httpClient.Post(endpoint, json, (success, response) =>
+                    {
+                        if (!success)
+                        {
+                            Debug.LogWarning($"[LvlUp] Failed to send crash report: {response}");
+                            // Re-queue failed reports
+                            _crashQueue.Enqueue(report);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[LvlUp] Error sending crash report: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Report an exception with context
+        /// </summary>
+        public void ReportException(Exception exception, string context = null, Dictionary<string, object> customData = null)
+        {
+            if (!_isEnabled) return;
+
+            string message = exception.Message;
+            if (!string.IsNullOrEmpty(context))
+            {
+                message = $"{context}: {message}";
+            }
+
+            ReportCrash(
+                crashType: "exception",
+                severity: "ERROR",
+                message: message,
+                stackTrace: exception.StackTrace ?? "",
+                exceptionType: exception.GetType().Name,
+                customData: customData
+            );
+        }
+
+        /// <summary>
+        /// Report a handled error
+        /// </summary>
+        public void ReportError(string message, string stackTrace = null, Dictionary<string, object> customData = null)
+        {
+            if (!_isEnabled) return;
+
+            ReportCrash(
+                crashType: "error",
+                severity: "MEDIUM",
+                message: message,
+                stackTrace: stackTrace ?? new System.Diagnostics.StackTrace().ToString(),
+                exceptionType: "Error",
+                customData: customData
+            );
+        }
+
+        /// <summary>
+        /// Get current platform string
+        /// </summary>
+        private string GetPlatform()
+        {
+#if UNITY_ANDROID
+            return "android";
+#elif UNITY_IOS
+            return "ios";
+#elif UNITY_WEBGL
+            return "webgl";
+#elif UNITY_STANDALONE_WIN
+            return "windows";
+#elif UNITY_STANDALONE_OSX
+            return "macos";
+#elif UNITY_STANDALONE_LINUX
+            return "linux";
+#else
+            return "unknown";
+#endif
+        }
+
+        /// <summary>
+        /// Clear all breadcrumbs
+        /// </summary>
+        public void ClearBreadcrumbs()
+        {
+            _breadcrumbs.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Crash report data model
+    /// </summary>
+    [Serializable]
+    public class CrashReport
+    {
+        public string GameId;
+        public string UserId;
+        public string SessionId;
+        public string CrashType;
+        public string Severity;
+        public string Message;
+        public string StackTrace;
+        public string ExceptionType;
+        public string Platform;
+        public string OsVersion;
+        public string Manufacturer;
+        public string Device;
+        public string DeviceId;
+        public string AppVersion;
+        public string BundleId;
+        public string EngineVersion;
+        public string SdkVersion;
+        public string ConnectionType;
+        public long? MemoryUsage;
+        public float? BatteryLevel;
+        public List<Breadcrumb> Breadcrumbs;
+        public Dictionary<string, object> CustomData;
+        public DateTime Timestamp;
+    }
+
+    /// <summary>
+    /// Breadcrumb for tracking user actions
+    /// </summary>
+    [Serializable]
+    public class Breadcrumb
+    {
+        public DateTime Timestamp;
+        public string Message;
+        public string Type;
+        public Dictionary<string, object> Data;
+    }
+
+    /// <summary>
+    /// Breadcrumb types
+    /// </summary>
+    public enum BreadcrumbType
+    {
+        Navigation,
+        UserAction,
+        Network,
+        StateChange,
+        Log,
+        Error
+    }
+}
+

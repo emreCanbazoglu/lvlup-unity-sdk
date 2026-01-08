@@ -32,6 +32,7 @@ namespace LvlUp
         private LvlUpConfig _config;
         private LvlUpHttpClient _httpClient;
         private GeoLocationService _geoService;
+        private CrashReporter _crashReporter;
         private string _apiKey;
         private string _baseUrl;
 
@@ -85,6 +86,15 @@ namespace LvlUp
 
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
             _geoService = new GeoLocationService();
+            _crashReporter = new CrashReporter(_httpClient, _apiKey, null, null);
+            
+            // Enable crash reporting by default
+            if (_config.enableCrashReporting)
+            {
+                _crashReporter.SetEnabled(true);
+                _crashReporter.SetAutoCapture(true);
+            }
+            
             _isInitialized = true;
             _lastFlushTime = Time.time;
 
@@ -643,6 +653,54 @@ namespace LvlUp
             }
             
             return userId;
+        }
+
+        #endregion
+
+        #region Crash Reporting
+
+        /// <summary>
+        /// Add a breadcrumb to track user actions
+        /// </summary>
+        public static void AddBreadcrumb(string message, BreadcrumbType type = BreadcrumbType.Navigation, Dictionary<string, object> data = null)
+        {
+            if (Instance._crashReporter != null)
+            {
+                Instance._crashReporter.AddBreadcrumb(message, type, data);
+            }
+        }
+
+        /// <summary>
+        /// Report an exception manually
+        /// </summary>
+        public static void ReportException(Exception exception, string context = null, Dictionary<string, object> customData = null)
+        {
+            if (Instance._crashReporter != null)
+            {
+                Instance._crashReporter.ReportException(exception, context, customData);
+            }
+        }
+
+        /// <summary>
+        /// Report an error manually
+        /// </summary>
+        public static void ReportError(string message, string stackTrace = null, Dictionary<string, object> customData = null)
+        {
+            if (Instance._crashReporter != null)
+            {
+                Instance._crashReporter.ReportError(message, stackTrace, customData);
+            }
+        }
+
+        /// <summary>
+        /// Enable or disable crash reporting
+        /// </summary>
+        public static void SetCrashReportingEnabled(bool enabled)
+        {
+            if (Instance._crashReporter != null)
+            {
+                Instance._crashReporter.SetEnabled(enabled);
+            }
         }
 
         #endregion

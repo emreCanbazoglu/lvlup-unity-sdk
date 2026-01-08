@@ -65,6 +65,11 @@ namespace LvlUp
         /// Persist event queue to disk for offline support
         /// </summary>
         public bool persistQueueToDisk = true;
+
+        /// <summary>
+        /// Enable automatic crash and exception reporting
+        /// </summary>
+        public bool enableCrashReporting = true;
     }
 }
 
