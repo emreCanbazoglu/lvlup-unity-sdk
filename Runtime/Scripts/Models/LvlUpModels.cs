@@ -236,6 +236,20 @@ namespace LvlUp.Models
 #elif UNITY_IOS
             this.manufacturer = "Apple";
             this.device = SystemInfo.deviceModel;
+            
+            // Get app build number from Info.plist (CFBundleVersion)
+            try
+            {
+                string buildNumber = LvlUp.Plugins.iOSBuildNumber.GetBuildNumber();
+                if (!string.IsNullOrEmpty(buildNumber))
+                {
+                    this.appBuild = buildNumber;
+                }
+            }
+            catch (Exception)
+            {
+                // Silently fail if not available
+            }
 #endif
             
             // Note: Geographic location is NOT auto-populated here because it requires async network call
