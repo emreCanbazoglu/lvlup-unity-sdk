@@ -23,7 +23,17 @@ namespace LvlUp
             };
 
             MergeProperties(properties, additionalProperties);
-            LvlUpManager.Instance.TrackEvent("level_start", properties);
+            
+            // Create LevelEvent and apply global level funnel config
+            var levelEvent = new LvlUp.Models.LevelEvent("level_start", properties);
+            var (funnel, version) = LvlUpManager.Instance.GetLevelFunnel();
+            if (!string.IsNullOrEmpty(funnel))
+            {
+                levelEvent.levelFunnel = funnel;
+                levelEvent.levelFunnelVersion = version;
+            }
+            
+            LvlUpManager.Instance.TrackEvent(levelEvent);
         }
 
         /// <summary>
@@ -34,42 +44,11 @@ namespace LvlUp
         /// <param name="additionalProperties">Optional additional properties</param>
         public static void TrackLevelStart(int levelId, string levelName, Dictionary<string, object> additionalProperties = null)
         {
-            var properties = new Dictionary<string, object>
-            {
-                { "levelId", levelId },
-                { "levelName", levelName },
-            };
-
-            MergeProperties(properties, additionalProperties);
-            LvlUpManager.Instance.TrackEvent("level_start", properties);
-        }
-
-        /// <summary>
-        /// Track a level start event with custom level funnel tracking
-        /// This overrides the global level funnel configuration for this specific event
-        /// </summary>
-        /// <param name="levelId">Level identifier</param>
-        /// <param name="levelFunnel">Level funnel name (e.g., "live_v1", "test_hard")</param>
-        /// <param name="levelFunnelVersion">Level funnel version (e.g., 1, 2, 3)</param>
-        /// <param name="additionalProperties">Optional additional properties</param>
-        public static void TrackLevelStartWithFunnel(int levelId, string levelFunnel, int levelFunnelVersion, Dictionary<string, object> additionalProperties = null)
-        {
-            var properties = new Dictionary<string, object>
-            {
-                { "levelId", levelId },
-            };
-
-            MergeProperties(properties, additionalProperties);
+            // Add levelName to additional properties and call base method
+            var props = additionalProperties ?? new Dictionary<string, object>();
+            props["levelName"] = levelName;
             
-            // Track event and manually set funnel data (bypasses auto-add in TrackEvent)
-            var manager = LvlUpManager.Instance;
-            var lvlUpEvent = new LvlUp.Models.LvlUpEvent("level_start", properties);
-            lvlUpEvent.levelFunnel = levelFunnel;
-            lvlUpEvent.levelFunnelVersion = levelFunnelVersion;
-            
-            // Use internal method to track with pre-configured event
-            // Note: This is a workaround - ideally we'd have a TrackEvent overload
-            manager.TrackEvent("level_start", properties);
+            TrackLevelStart(levelId, props);
         }
 
         /// <summary>
@@ -89,29 +68,17 @@ namespace LvlUp
             };
 
             MergeProperties(properties, additionalProperties);
-            LvlUpManager.Instance.TrackEvent("level_complete", properties);
-        }
-
-        /// <summary>
-        /// Track a level complete event with stars/rating
-        /// </summary>
-        /// <param name="levelId">Level identifier</param>
-        /// <param name="score">Player's score</param>
-        /// <param name="timeSeconds">Time taken in seconds</param>
-        /// <param name="stars">Stars earned (typically 1-3)</param>
-        /// <param name="additionalProperties">Optional additional properties</param>
-        public static void TrackLevelComplete(int levelId, int score, float timeSeconds, int stars, Dictionary<string, object> additionalProperties = null)
-        {
-            var properties = new Dictionary<string, object>
+            
+            // Create LevelEvent and apply global level funnel config
+            var levelEvent = new LvlUp.Models.LevelEvent("level_complete", properties);
+            var (funnel, version) = LvlUpManager.Instance.GetLevelFunnel();
+            if (!string.IsNullOrEmpty(funnel))
             {
-                { "levelId", levelId },
-                { "score", score },
-                { "timeSeconds", timeSeconds },
-                { "stars", stars },
-            };
-
-            MergeProperties(properties, additionalProperties);
-            LvlUpManager.Instance.TrackEvent("level_complete", properties);
+                levelEvent.levelFunnel = funnel;
+                levelEvent.levelFunnelVersion = version;
+            }
+            
+            LvlUpManager.Instance.TrackEvent(levelEvent);
         }
 
         /// <summary>
@@ -131,7 +98,17 @@ namespace LvlUp
             };
 
             MergeProperties(properties, additionalProperties);
-            LvlUpManager.Instance.TrackEvent("level_failed", properties);
+            
+            // Create LevelEvent and apply global level funnel config
+            var levelEvent = new LvlUp.Models.LevelEvent("level_failed", properties);
+            var (funnel, version) = LvlUpManager.Instance.GetLevelFunnel();
+            if (!string.IsNullOrEmpty(funnel))
+            {
+                levelEvent.levelFunnel = funnel;
+                levelEvent.levelFunnelVersion = version;
+            }
+            
+            LvlUpManager.Instance.TrackEvent(levelEvent);
         }
 
         /// <summary>
@@ -153,7 +130,17 @@ namespace LvlUp
             };
 
             MergeProperties(properties, additionalProperties);
-            LvlUpManager.Instance.TrackEvent("level_failed", properties);
+            
+            // Create LevelEvent and apply global level funnel config
+            var levelEvent = new LvlUp.Models.LevelEvent("level_failed", properties);
+            var (funnel, version) = LvlUpManager.Instance.GetLevelFunnel();
+            if (!string.IsNullOrEmpty(funnel))
+            {
+                levelEvent.levelFunnel = funnel;
+                levelEvent.levelFunnelVersion = version;
+            }
+            
+            LvlUpManager.Instance.TrackEvent(levelEvent);
         }
 
         #endregion

@@ -92,9 +92,6 @@ namespace LvlUp.Models
         public float? longitude;      // Longitude coordinate
         public string timezone;       // IANA timezone, e.g., "America/Los_Angeles"
 
-        // Level Funnel tracking
-        public string levelFunnel;         // Level funnel name, e.g., "live_v1", "live_v2"
-        public int? levelFunnelVersion;    // Level funnel version number, e.g., 1, 2, 3
 
         /// <summary>
         /// Copy metadata from this object to another EventMetadata object
@@ -124,13 +121,12 @@ namespace LvlUp.Models
             target.latitude = this.latitude;
             target.longitude = this.longitude;
             target.timezone = this.timezone;
-            target.levelFunnel = this.levelFunnel;
-            target.levelFunnelVersion = this.levelFunnelVersion;
         }
     }
 
     /// <summary>
     /// Event data for tracking - includes all metadata from backend Event model
+    /// Base class for all trackable events
     /// </summary>
     [Serializable]
     public class LvlUpEvent : EventMetadata
@@ -155,8 +151,9 @@ namespace LvlUp.Models
 
         /// <summary>
         /// Convert this LvlUpEvent to an EventDataItem for batch sending
+        /// Virtual so subclasses can override to include their custom fields
         /// </summary>
-        public EventDataItem ToEventDataItem()
+        public virtual EventDataItem ToEventDataItem()
         {
             var item = new EventDataItem
             {
@@ -207,7 +204,7 @@ namespace LvlUp.Models
             else if (Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork)
                 this.connectionType = "wifi";
             
-#if UNITY_ANDROID
+#if UNITY_ANDROID && !UNITY_EDITOR
             // Android-specific metadata
             try
             {
@@ -239,7 +236,7 @@ namespace LvlUp.Models
                 // Silently fail if Android APIs are not available
                 this.manufacturer = "Unknown";
             }
-#elif UNITY_IOS
+#elif UNITY_IOS && !UNITY_EDITOR
             this.manufacturer = "Apple";
             this.device = SystemInfo.deviceModel;
             
@@ -279,7 +276,46 @@ namespace LvlUp.Models
     }
 
     /// <summary>
-    /// Batch event request
+    /// Level-specific event - extends LvlUpEvent with level funnel tracking
+    /// Use this for level_start, level_complete, level_failed events
+    /// </summary>
+    [Serializable]
+    public class LevelEvent : LvlUpEvent
+    {
+        // Level Funnel tracking
+        public string levelFunnel;         // Level funnel name, e.g., "live_v1", "live_v2"
+        public int? levelFunnelVersion;    // Level funnel version number, e.g., 1, 2, 3
+
+        public LevelEvent(string eventName, Dictionary<string, object> properties = null) 
+            : base(eventName, properties)
+        {
+        }
+
+        /// <summary>
+        /// Convert this LevelEvent to an EventDataItem for batch sending
+        /// Overrides base to include level funnel data
+        /// </summary>
+        public override EventDataItem ToEventDataItem()
+        {
+            var item = base.ToEventDataItem();
+            
+            // Add level funnel data to properties if present
+            if (!string.IsNullOrEmpty(this.levelFunnel))
+            {
+                item.properties = item.properties ?? new Dictionary<string, object>();
+                item.properties["levelFunnel"] = this.levelFunnel;
+                if (this.levelFunnelVersion.HasValue)
+                {
+                    item.properties["levelFunnelVersion"] = this.levelFunnelVersion.Value;
+                }
+            }
+            
+            return item;
+        }
+    }
+
+    /// <summary>
+    /// Set geographic location for an event
     /// </summary>
     [Serializable]
     public class BatchEventRequest
@@ -287,7 +323,6 @@ namespace LvlUp.Models
         public string userId;
         public string sessionId;
         public List<EventDataItem> events;
-        public DeviceInfo deviceInfo;
     }
 
     /// <summary>
@@ -300,20 +335,7 @@ namespace LvlUp.Models
         public Dictionary<string, object> properties;
         public string timestamp;
     }
-
-    /// <summary>
-    /// Device info for backward compatibility - minimal fields only
-    /// Event-level metadata in EventDataItem is the primary source
-    /// </summary>
-    [Serializable]
-    public class DeviceInfo
-    {
-        // Core identifiers only (kept for backward compatibility with old API contracts)
-        public string platform;
-        public string version;
-        public string deviceId;
-    }
-
+    
     /// <summary>
     /// Checkpoint data
     /// </summary>
@@ -344,14 +366,42 @@ namespace LvlUp.Models
     }
 
     /// <summary>
-    /// Checkpoint record request
+    /// Checkpoint record request - extends LvlUpEvent to track checkpoint completion as a full event
     /// </summary>
     [Serializable]
-    public class CheckpointRecordRequest
+    public class CheckpointRecordRequest : LvlUpEvent
     {
+        // Checkpoint-specific fields
         public string userId;
         public string checkpointId;
         public Dictionary<string, object> metadata;
+        
+        // Constructor with event name for LvlUpEvent base
+        public CheckpointRecordRequest() : base("checkpoint_recorded", null)
+        {
+        }
+        
+        /// <summary>
+        /// Override to include checkpoint-specific fields in properties
+        /// </summary>
+        public override EventDataItem ToEventDataItem()
+        {
+            var item = base.ToEventDataItem();
+            
+            // Add checkpoint-specific fields to properties
+            item.properties = item.properties ?? new Dictionary<string, object>();
+            if (!string.IsNullOrEmpty(this.userId))
+                item.properties["userId"] = this.userId;
+            if (!string.IsNullOrEmpty(this.checkpointId))
+                item.properties["checkpointId"] = this.checkpointId;
+            if (this.metadata != null && this.metadata.Count > 0)
+                item.properties["metadata"] = this.metadata;
+            
+            return item;
+        }
+        
+        // Note: All device/platform/app/geo metadata auto-populated by LvlUpEvent base class
+        // This allows full analytics on WHERE and WHEN users complete checkpoints
     }
 
     /// <summary>
@@ -420,40 +470,76 @@ namespace LvlUp.Models
     }
 
     /// <summary>
-    /// Session start request
+    /// Session start request - extends LvlUpEvent to reuse auto-population logic
     /// </summary>
     [Serializable]
-    public class SessionStartRequest
+    public class SessionStartRequest : LvlUpEvent
     {
+        // Session-specific fields
         public string userId;
-        public string deviceId;
-        public string platform;
-        public string version;
-        public string country;
-        public string language;
         public string startTime;  // ISO date format
+        
+        // Constructor with event name for LvlUpEvent base
+        public SessionStartRequest() : base("session_start", null)
+        {
+            this.startTime = DateTime.UtcNow.ToString("o");
+        }
+        
+        /// <summary>
+        /// Override to include session-specific fields in properties
+        /// </summary>
+        public override EventDataItem ToEventDataItem()
+        {
+            var item = base.ToEventDataItem();
+            
+            // Add session-specific fields to properties
+            item.properties = item.properties ?? new Dictionary<string, object>();
+            if (!string.IsNullOrEmpty(this.userId))
+                item.properties["userId"] = this.userId;
+            if (!string.IsNullOrEmpty(this.startTime))
+                item.properties["startTime"] = this.startTime;
+            
+            return item;
+        }
+        
+        // Note: All device/platform/app/geo metadata auto-populated by LvlUpEvent base class
     }
 
     /// <summary>
-    /// Session end request
+    /// Session end request - extends LvlUpEvent to reuse auto-population logic
     /// </summary>
     [Serializable]
-    public class SessionEndRequest
+    public class SessionEndRequest : LvlUpEvent
     {
+        // Session-specific fields
         public string sessionId;  // Used internally, not sent in body (goes in URL)
         public string endTime;    // Optional: ISO date format, defaults to current time on backend
-    }
-
-    /// <summary>
-    /// Event tracking request
-    /// </summary>
-    [Serializable]
-    public class EventTrackRequest
-    {
-        public string userId;
-        public string sessionId;
-        public string type;
-        public Dictionary<string, object> data;
+        
+        // Constructor with event name for LvlUpEvent base
+        public SessionEndRequest() : base("session_end", null)
+        {
+            this.endTime = DateTime.UtcNow.ToString("o");
+        }
+        
+        /// <summary>
+        /// Override to include session-specific fields in properties
+        /// </summary>
+        public override EventDataItem ToEventDataItem()
+        {
+            var item = base.ToEventDataItem();
+            
+            // Add session-specific fields to properties
+            item.properties = item.properties ?? new Dictionary<string, object>();
+            if (!string.IsNullOrEmpty(this.sessionId))
+                item.properties["sessionId"] = this.sessionId;
+            if (!string.IsNullOrEmpty(this.endTime))
+                item.properties["endTime"] = this.endTime;
+            
+            return item;
+        }
+        
+        // Note: All device/platform/app/geo metadata auto-populated by LvlUpEvent base class
+        // Captures current state at session end (battery, connection, location changes, etc.)
     }
 }
 

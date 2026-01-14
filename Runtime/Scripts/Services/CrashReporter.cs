@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using LvlUp.Models;
 
 namespace LvlUp.Services
 {
@@ -173,18 +174,21 @@ namespace LvlUp.Services
                     StackTrace = stackTrace,
                     ExceptionType = exceptionType ?? "UnknownException",
                     
-                    // Device & Platform info
-                    Platform = GetPlatform(),
-                    OsVersion = SystemInfo.operatingSystem,
-                    Manufacturer = SystemInfo.deviceModel.Split(' ')[0],
-                    Device = SystemInfo.deviceModel,
-                    DeviceId = SystemInfo.deviceUniqueIdentifier,
+                    // Device & Platform info (inherited from EventMetadata)
+                    platform = GetPlatform(),
+                    osVersion = SystemInfo.operatingSystem,
+                    manufacturer = SystemInfo.deviceModel.Split(' ')[0],
+                    device = SystemInfo.deviceModel,
+                    deviceId = SystemInfo.deviceUniqueIdentifier,
                     
-                    // App info
-                    AppVersion = Application.version,
-                    BundleId = Application.identifier,
-                    EngineVersion = $"unity {Application.unityVersion}",
-                    SdkVersion = "unity 1.0.0",
+                    // App info (inherited from EventMetadata)
+                    appVersion = Application.version,
+                    bundleId = Application.identifier,
+                    engineVersion = $"unity {Application.unityVersion}",
+                    sdkVersion = "unity 1.0.0",
+                    
+                    // Connection type (inherited from EventMetadata)
+                    connectionType = GetConnectionType(),
                     
                     // System info
                     MemoryUsage = (long)UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong(),
@@ -307,6 +311,20 @@ namespace LvlUp.Services
         }
 
         /// <summary>
+        /// Get current connection type
+        /// </summary>
+        private string GetConnectionType()
+        {
+            if (Application.internetReachability == NetworkReachability.NotReachable)
+                return "offline";
+            else if (Application.internetReachability == NetworkReachability.ReachableViaCarrierDataNetwork)
+                return "wwan";
+            else if (Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork)
+                return "wifi";
+            return "unknown";
+        }
+
+        /// <summary>
         /// Clear all breadcrumbs
         /// </summary>
         public void ClearBreadcrumbs()
@@ -316,11 +334,12 @@ namespace LvlUp.Services
     }
 
     /// <summary>
-    /// Crash report data model
+    /// Crash report data model - extends EventMetadata for consistency
     /// </summary>
     [Serializable]
-    public class CrashReport
+    public class CrashReport : EventMetadata
     {
+        // Crash-specific fields
         public string GameId;
         public string UserId;
         public string SessionId;
@@ -329,21 +348,20 @@ namespace LvlUp.Services
         public string Message;
         public string StackTrace;
         public string ExceptionType;
-        public string Platform;
-        public string OsVersion;
-        public string Manufacturer;
-        public string Device;
-        public string DeviceId;
-        public string AppVersion;
-        public string BundleId;
-        public string EngineVersion;
-        public string SdkVersion;
-        public string ConnectionType;
+        
+        // System info (not in EventMetadata)
         public long? MemoryUsage;
         public float? BatteryLevel;
+        
+        // Context
         public List<Breadcrumb> Breadcrumbs;
         public Dictionary<string, object> CustomData;
         public DateTime Timestamp;
+        
+        // Note: Device/Platform/App metadata inherited from EventMetadata:
+        // - platform, osVersion, manufacturer, device, deviceId
+        // - appVersion, appBuild, bundleId, engineVersion, sdkVersion
+        // - connectionType, sessionNum, country, city, etc.
     }
 
     /// <summary>

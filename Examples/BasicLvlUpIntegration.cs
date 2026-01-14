@@ -104,23 +104,22 @@ public class BasicLvlUpIntegration : MonoBehaviour
     /// Example: Track level completion using helper method
     /// Call this when player completes a level
     /// </summary>
-    public void OnLevelComplete(int levelId, int score, int stars, float timeSeconds)
+    public void OnLevelComplete(int levelId, int score, float timeSeconds)
     {
         // Using the standard helper method with stars
-        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, stars);
+        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds);
         
-        Debug.Log($"✅ Level {levelId} complete! Score: {score}, Stars: {stars}");
+        Debug.Log($"✅ Level {levelId} complete! Score: {score}");
     }
 
     /// <summary>
     /// Example: Track level completion with additional data
     /// </summary>
-    public void OnLevelCompleteAdvanced(int levelId, int score, float timeSeconds, int stars)
+    public void OnLevelCompleteAdvanced(int levelId, int score, float timeSeconds)
     {
         // Using helper method with additional properties
-        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, stars, new Dictionary<string, object>
+        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, new Dictionary<string, object>
         {
-            { "perfectCompletion", stars == 3 },
             { "coinsCollected", GetCoinsCollected() },
             { "enemiesDefeated", GetEnemiesDefeated() }
         });

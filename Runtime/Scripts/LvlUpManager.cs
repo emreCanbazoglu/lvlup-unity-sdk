@@ -212,16 +212,26 @@ namespace LvlUp
             PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
             PlayerPrefs.Save();
 
+            // SessionStartRequest auto-populates all metadata via LvlUpEvent constructor
             var request = new SessionStartRequest
             {
                 userId = userId,
-                deviceId = _currentUserMetadata.deviceId ?? SystemInfo.deviceUniqueIdentifier,
-                platform = _currentUserMetadata.platform ?? Application.platform.ToString(),
-                version = _currentUserMetadata.version ?? Application.version,
-                country = _currentUserMetadata.country ?? "Unknown",
-                language = _currentUserMetadata.language ?? Application.systemLanguage.ToString(),
-                startTime = DateTime.UtcNow.ToString("o")  // ISO 8601 format
+                sessionNum = _sessionNumber
             };
+            
+            // Apply cached geo data if available
+            if (_config.enableGeoTracking && _cachedGeoData != null)
+            {
+                request.SetGeoLocation(
+                    _cachedGeoData.country,
+                    _cachedGeoData.countryCode,
+                    _cachedGeoData.region,
+                    _cachedGeoData.city,
+                    _cachedGeoData.latitude,
+                    _cachedGeoData.longitude,
+                    _cachedGeoData.timezone
+                );
+            }
 
             StartCoroutine(_httpClient.Post<SessionData>("analytics/sessions", request, response =>
             {
@@ -246,11 +256,27 @@ namespace LvlUp
                 return;
             }
 
+            // SessionEndRequest auto-populates all metadata via LvlUpEvent constructor
             var request = new SessionEndRequest
             {
                 sessionId = _currentSession.sessionId,
-                endTime = DateTime.UtcNow.ToString("o")  // ISO 8601 format
+                sessionNum = _sessionNumber
             };
+            
+            // Apply cached geo data if available (may have changed during session)
+            if (_config.enableGeoTracking && _cachedGeoData != null)
+            {
+                request.SetGeoLocation(
+                    _cachedGeoData.country,
+                    _cachedGeoData.countryCode,
+                    _cachedGeoData.region,
+                    _cachedGeoData.city,
+                    _cachedGeoData.latitude,
+                    _cachedGeoData.longitude,
+                    _cachedGeoData.timezone
+                );
+            }
+
 
             StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{_currentSession.sessionId}", request, response =>
             {
@@ -347,9 +373,18 @@ namespace LvlUp
         #region Event Tracking
 
         /// <summary>
-        /// Track a single event
+        /// Track a single event (convenience method - creates LvlUpEvent internally)
         /// </summary>
         public void TrackEvent(string eventName, Dictionary<string, object> properties, Action<ApiResponse> callback = null)
+        {
+            var lvlUpEvent = new LvlUpEvent(eventName, properties);
+            TrackEvent(lvlUpEvent, callback);
+        }
+
+        /// <summary>
+        /// Track an event (direct method - accepts any LvlUpEvent or subclass like LevelEvent)
+        /// </summary>
+        public void TrackEvent(LvlUpEvent lvlUpEvent, Action<ApiResponse> callback = null)
         {
             if (!_isInitialized)
             {
@@ -357,8 +392,6 @@ namespace LvlUp
                 callback?.Invoke(new ApiResponse { success = false, error = "SDK not initialized" });
                 return;
             }
-
-            var lvlUpEvent = new LvlUpEvent(eventName, properties);
             
             // Add session number if available
             if (_sessionNumber > 0)
@@ -367,16 +400,6 @@ namespace LvlUp
             // Apply cached geo data if available
             if (_config.enableGeoTracking)
                 ApplyGeoDataToEvent(lvlUpEvent);
-
-            // Automatically add level funnel data for level events
-            if (!string.IsNullOrEmpty(_config.levelFunnel) && IsLevelEvent(eventName))
-            {
-                lvlUpEvent.levelFunnel = _config.levelFunnel;
-                lvlUpEvent.levelFunnelVersion = _config.levelFunnelVersion;
-                
-                if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Added level funnel data: {_config.levelFunnel} (v{_config.levelFunnelVersion})");
-            }
 
             if (_config.sendImmediately)
             {
@@ -387,7 +410,7 @@ namespace LvlUp
                 _eventBatch.Add(lvlUpEvent);
 
                 if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Event queued: {eventName} (Batch size: {_eventBatch.Count}/{_config.eventBatchSize})");
+                    Debug.Log($"[LvlUp] Event queued: {lvlUpEvent.eventName} (Batch size: {_eventBatch.Count}/{_config.eventBatchSize})");
 
                 // Check if we need to flush
                 if (_eventBatch.Count >= _config.eventBatchSize)
@@ -422,15 +445,6 @@ namespace LvlUp
             return (_config.levelFunnel, _config.levelFunnelVersion);
         }
 
-        /// <summary>
-        /// Check if an event is a level-related event
-        /// </summary>
-        private bool IsLevelEvent(string eventName)
-        {
-            return eventName == "level_start" || 
-                   eventName == "level_complete" || 
-                   eventName == "level_failed";
-        }
 
         /// <summary>
         /// Track multiple events in a batch
@@ -455,13 +469,6 @@ namespace LvlUp
                 userId = _currentUserId,
                 sessionId = _currentSession?.sessionId,
                 events = new List<EventDataItem>(),
-                deviceInfo = new DeviceInfo
-                {
-                    // Only core fields - all extended metadata is in event-level data
-                    platform = _currentUserMetadata?.platform ?? Application.platform.ToString(),
-                    version = _currentUserMetadata?.version ?? Application.version,
-                    deviceId = _currentUserMetadata?.deviceId ?? SystemInfo.deviceUniqueIdentifier
-                }
             };
 
             foreach (var evt in events)
@@ -486,15 +493,15 @@ namespace LvlUp
 
         private void SendEventImmediately(LvlUpEvent lvlUpEvent, Action<ApiResponse> callback)
         {
-            var request = new EventTrackRequest
+            // Send as a single-event batch to ensure all metadata fields are included
+            var batchRequest = new BatchEventRequest
             {
                 userId = _currentUserId,
                 sessionId = _currentSession?.sessionId,
-                type = lvlUpEvent.eventName,
-                data = lvlUpEvent.properties
+                events = new List<EventDataItem> { lvlUpEvent.ToEventDataItem() },
             };
 
-            StartCoroutine(_httpClient.Post<object>("analytics/events", request, response =>
+            StartCoroutine(_httpClient.Post<object>("analytics/events/batch", batchRequest, response =>
             {
                 if (_config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Event sent: {lvlUpEvent.eventName} - Success: {response.success}");
@@ -602,12 +609,28 @@ namespace LvlUp
                 return;
             }
 
+            // CheckpointRecordRequest auto-populates all metadata via LvlUpEvent constructor
             var request = new CheckpointRecordRequest
             {
                 userId = _currentUserId,
                 checkpointId = checkpointId,
-                metadata = metadata ?? new Dictionary<string, object>()
+                metadata = metadata ?? new Dictionary<string, object>(),
+                sessionNum = _sessionNumber
             };
+            
+            // Apply cached geo data if available
+            if (_config.enableGeoTracking && _cachedGeoData != null)
+            {
+                request.SetGeoLocation(
+                    _cachedGeoData.country,
+                    _cachedGeoData.countryCode,
+                    _cachedGeoData.region,
+                    _cachedGeoData.city,
+                    _cachedGeoData.latitude,
+                    _cachedGeoData.longitude,
+                    _cachedGeoData.timezone
+                );
+            }
 
             StartCoroutine(_httpClient.Post<object>("analytics/journey/record", request, response =>
             {
