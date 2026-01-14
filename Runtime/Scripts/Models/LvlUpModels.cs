@@ -92,6 +92,10 @@ namespace LvlUp.Models
         public float? longitude;      // Longitude coordinate
         public string timezone;       // IANA timezone, e.g., "America/Los_Angeles"
 
+        // Level Funnel tracking
+        public string levelFunnel;         // Level funnel name, e.g., "live_v1", "live_v2"
+        public int? levelFunnelVersion;    // Level funnel version number, e.g., 1, 2, 3
+
         /// <summary>
         /// Copy metadata from this object to another EventMetadata object
         /// </summary>
@@ -120,6 +124,8 @@ namespace LvlUp.Models
             target.latitude = this.latitude;
             target.longitude = this.longitude;
             target.timezone = this.timezone;
+            target.levelFunnel = this.levelFunnel;
+            target.levelFunnelVersion = this.levelFunnelVersion;
         }
     }
 

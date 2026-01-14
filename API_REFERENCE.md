@@ -283,8 +283,12 @@ public class LvlUpConfig
     public float timeout = 30f;
     public bool sendImmediately = false;
     public bool autoTrackAppLifecycle = true;
+    public bool enableGeoTracking = false;
     public bool autoTrackScenes = false;
     public bool persistQueueToDisk = true;
+    public bool enableCrashReporting = true;
+    public string levelFunnel = null;
+    public int levelFunnelVersion = 1;
 }
 ```
 
@@ -299,8 +303,12 @@ public class LvlUpConfig
 - **timeout**: Request timeout in seconds
 - **sendImmediately**: Send events immediately instead of batching
 - **autoTrackAppLifecycle**: Track app pause/resume events
+- **enableGeoTracking**: Enable automatic geographic location tracking
 - **autoTrackScenes**: Automatically track scene changes
 - **persistQueueToDisk**: Save queue to disk for persistence
+- **enableCrashReporting**: Enable automatic crash and exception reporting
+- **levelFunnel**: Level funnel name for A/B testing different level designs (e.g., "live_v1", "test_hard")
+- **levelFunnelVersion**: Level funnel version number, incremented when funnel is modified
 
 **Example:**
 ```csharp
@@ -308,10 +316,169 @@ var config = new LvlUpConfig
 {
     enableDebugLogs = true,
     eventBatchSize = 20,
-    eventFlushInterval = 15f
+    eventFlushInterval = 15f,
+    levelFunnel = "live_v1",
+    levelFunnelVersion = 2
 };
 
 LvlUpManager.Initialize(apiKey, baseUrl, config);
+```
+
+### Level Funnel Tracking
+
+Level funnel tracking helps you A/B test different level designs and track their performance separately. When configured, the SDK automatically adds `levelFunnel` and `levelFunnelVersion` to all level events (`level_start`, `level_complete`, `level_failed`).
+
+**Use Cases:**
+- Compare different level layouts ("live_v1" vs "live_v2")
+- Track performance across level design iterations (version 1, 2, 3...)
+- Measure impact of level difficulty changes
+- Separate test levels from production levels
+
+#### Method 1: Static Configuration (Simple)
+Use this when your funnel is hardcoded or determined at build time:
+
+```csharp
+// Configure level funnel at initialization
+var config = new LvlUpConfig
+{
+    levelFunnel = "live_v1",      // Current level design name
+    levelFunnelVersion = 2         // Current version number
+};
+LvlUpManager.Initialize(apiKey, baseUrl, config);
+
+// All level events will automatically include funnel data
+LvlUpEvents.TrackLevelStart(levelId: 1, levelName: "Tutorial");
+```
+
+#### Method 2: Dynamic Configuration (Recommended for A/B Tests)
+Use this when fetching funnel assignment from backend (Remote Config or A/B Test):
+
+```csharp
+// Step 1: Initialize SDK without funnel config
+LvlUpManager.Initialize(apiKey, baseUrl, config: null, onComplete: (success, message) =>
+{
+    if (success)
+    {
+        // Step 2: Fetch funnel assignment from Remote Config or A/B Test
+        FetchRemoteConfig((remoteConfig) =>
+        {
+            string funnel = remoteConfig["level_funnel"];        // e.g., "live_v1"
+            int version = remoteConfig["level_funnel_version"];  // e.g., 2
+            
+            // Step 3: Set the funnel configuration
+            LvlUpManager.Instance.SetLevelFunnel(funnel, version);
+            
+            // Step 4: Now start tracking level events
+            LvlUpEvents.TrackLevelStart(1);
+        });
+    }
+});
+```
+
+#### Available Methods
+
+##### SetLevelFunnel
+```csharp
+public void SetLevelFunnel(string levelFunnel, int levelFunnelVersion)
+```
+Set or update level funnel configuration after initialization. Useful when fetching funnel assignment from backend.
+
+**Parameters:**
+- `levelFunnel` (string): Level funnel name (e.g., "live_v1", "test_hard")
+- `levelFunnelVersion` (int): Level funnel version number (e.g., 1, 2, 3)
+
+**Example:**
+```csharp
+// After fetching from Remote Config or A/B Test
+LvlUpManager.Instance.SetLevelFunnel("live_v1", 2);
+```
+
+##### GetLevelFunnel
+```csharp
+public (string funnel, int version) GetLevelFunnel()
+```
+Get current level funnel configuration.
+
+**Returns:** Tuple with (funnel name, version number)
+
+**Example:**
+```csharp
+var (funnel, version) = LvlUpManager.Instance.GetLevelFunnel();
+Debug.Log($"Current funnel: {funnel} v{version}");
+```
+
+#### Complete A/B Test Example
+
+```csharp
+using UnityEngine;
+using LvlUp;
+
+public class GameInitializer : MonoBehaviour
+{
+    void Start()
+    {
+        // Initialize SDK first
+        LvlUpManager.Initialize(
+            apiKey: "your_api_key",
+            baseUrl: "https://api.lvlup.com/api",
+            config: new LvlUpConfig { enableDebugLogs = true },
+            onComplete: OnSdkInitialized
+        );
+    }
+    
+    void OnSdkInitialized(bool success, string message)
+    {
+        if (!success)
+        {
+            Debug.LogError($"SDK init failed: {message}");
+            return;
+        }
+        
+        // Fetch Remote Config to get funnel assignment
+        FetchLevelFunnelFromBackend();
+    }
+    
+    void FetchLevelFunnelFromBackend()
+    {
+        // Option 1: Use LvlUp Remote Config
+        LvlUpManager.Instance.GetRemoteConfig("level_funnel_config", (response) =>
+        {
+            if (response.success)
+            {
+                string funnel = response.data["funnel"];
+                int version = (int)response.data["version"];
+                
+                // Set the funnel
+                LvlUpManager.Instance.SetLevelFunnel(funnel, version);
+                
+                // Ready to track level events
+                StartGame();
+            }
+        });
+        
+        // Option 2: Use A/B Test Assignment
+        // The backend assigns user to a test variant, each variant has different funnel
+        LvlUpManager.Instance.GetABTestAssignment("level_design_test", (response) =>
+        {
+            if (response.success && response.data.variant != null)
+            {
+                // Each variant config contains funnel info
+                var variantConfig = response.data.variant.config;
+                string funnel = variantConfig["funnel"];
+                int version = (int)variantConfig["version"];
+                
+                LvlUpManager.Instance.SetLevelFunnel(funnel, version);
+                StartGame();
+            }
+        });
+    }
+    
+    void StartGame()
+    {
+        // Now all level events will include the funnel data
+        Debug.Log("Game ready with funnel configuration!");
+    }
+}
 ```
 
 ---

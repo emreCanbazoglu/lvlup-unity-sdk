@@ -5,6 +5,29 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-14
+
+### Added
+- **Level Funnel Tracking**: A/B test and track different level design iterations
+  - `levelFunnel` field in `LvlUpConfig` for setting global funnel name (e.g., "live_v1", "test_hard")
+  - `levelFunnelVersion` field in `LvlUpConfig` for tracking design version numbers
+  - `SetLevelFunnel(string, int)` method for setting funnel configuration after initialization (recommended for A/B tests)
+  - `GetLevelFunnel()` method for retrieving current funnel configuration
+  - Automatic addition of funnel data to all level events (`level_start`, `level_complete`, `level_failed`)
+  - `levelFunnel` and `levelFunnelVersion` fields in `EventMetadata` base class
+  - Support for filtering and comparing funnel performance in analytics dashboard
+
+### Changed
+- Enhanced level event tracking to automatically include funnel information when configured
+- Updated `LvlUpManager.TrackEvent` to detect level events and add funnel data automatically
+- Updated API documentation with both static and dynamic configuration approaches
+
+### Documentation
+- Added level funnel configuration section to API_REFERENCE.md with complete A/B test example
+- Added dynamic configuration approach to QUICKSTART.md (recommended for Remote Config/A/B tests)
+- Documented use cases for A/B testing level designs
+- Added example showing how to fetch funnel assignment from backend before setting configuration
+
 ## [1.0.0] - 2026-01-05
 
 ### Added

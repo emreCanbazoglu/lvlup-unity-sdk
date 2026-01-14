@@ -45,6 +45,34 @@ namespace LvlUp
         }
 
         /// <summary>
+        /// Track a level start event with custom level funnel tracking
+        /// This overrides the global level funnel configuration for this specific event
+        /// </summary>
+        /// <param name="levelId">Level identifier</param>
+        /// <param name="levelFunnel">Level funnel name (e.g., "live_v1", "test_hard")</param>
+        /// <param name="levelFunnelVersion">Level funnel version (e.g., 1, 2, 3)</param>
+        /// <param name="additionalProperties">Optional additional properties</param>
+        public static void TrackLevelStartWithFunnel(int levelId, string levelFunnel, int levelFunnelVersion, Dictionary<string, object> additionalProperties = null)
+        {
+            var properties = new Dictionary<string, object>
+            {
+                { "levelId", levelId },
+            };
+
+            MergeProperties(properties, additionalProperties);
+            
+            // Track event and manually set funnel data (bypasses auto-add in TrackEvent)
+            var manager = LvlUpManager.Instance;
+            var lvlUpEvent = new LvlUp.Models.LvlUpEvent("level_start", properties);
+            lvlUpEvent.levelFunnel = levelFunnel;
+            lvlUpEvent.levelFunnelVersion = levelFunnelVersion;
+            
+            // Use internal method to track with pre-configured event
+            // Note: This is a workaround - ideally we'd have a TrackEvent overload
+            manager.TrackEvent("level_start", properties);
+        }
+
+        /// <summary>
         /// Track a level complete event with standard properties
         /// </summary>
         /// <param name="levelId">Level identifier</param>

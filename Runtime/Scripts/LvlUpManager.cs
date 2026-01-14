@@ -368,6 +368,16 @@ namespace LvlUp
             if (_config.enableGeoTracking)
                 ApplyGeoDataToEvent(lvlUpEvent);
 
+            // Automatically add level funnel data for level events
+            if (!string.IsNullOrEmpty(_config.levelFunnel) && IsLevelEvent(eventName))
+            {
+                lvlUpEvent.levelFunnel = _config.levelFunnel;
+                lvlUpEvent.levelFunnelVersion = _config.levelFunnelVersion;
+                
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Added level funnel data: {_config.levelFunnel} (v{_config.levelFunnelVersion})");
+            }
+
             if (_config.sendImmediately)
             {
                 SendEventImmediately(lvlUpEvent, callback);
@@ -387,6 +397,39 @@ namespace LvlUp
 
                 callback?.Invoke(new ApiResponse { success = true, message = "Event queued" });
             }
+        }
+
+        /// <summary>
+        /// Set level funnel configuration after initialization
+        /// Useful when fetching funnel assignment from backend (Remote Config or A/B Test)
+        /// </summary>
+        /// <param name="levelFunnel">Level funnel name (e.g., "live_v1", "test_hard")</param>
+        /// <param name="levelFunnelVersion">Level funnel version number (e.g., 1, 2, 3)</param>
+        public void SetLevelFunnel(string levelFunnel, int levelFunnelVersion)
+        {
+            _config.levelFunnel = levelFunnel;
+            _config.levelFunnelVersion = levelFunnelVersion;
+            
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Level funnel updated: {levelFunnel} (v{levelFunnelVersion})");
+        }
+
+        /// <summary>
+        /// Get current level funnel configuration
+        /// </summary>
+        public (string funnel, int version) GetLevelFunnel()
+        {
+            return (_config.levelFunnel, _config.levelFunnelVersion);
+        }
+
+        /// <summary>
+        /// Check if an event is a level-related event
+        /// </summary>
+        private bool IsLevelEvent(string eventName)
+        {
+            return eventName == "level_start" || 
+                   eventName == "level_complete" || 
+                   eventName == "level_failed";
         }
 
         /// <summary>

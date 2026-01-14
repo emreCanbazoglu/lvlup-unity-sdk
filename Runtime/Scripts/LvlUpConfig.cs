@@ -70,6 +70,20 @@ namespace LvlUp
         /// Enable automatic crash and exception reporting
         /// </summary>
         public bool enableCrashReporting = true;
+
+        /// <summary>
+        /// Level funnel name for tracking different level design iterations
+        /// Example: "live_v1", "live_v2", "test_hard"
+        /// This helps compare performance between different level layouts/designs
+        /// </summary>
+        public string levelFunnel = null;
+
+        /// <summary>
+        /// Level funnel version number (incremental)
+        /// Example: 1, 2, 3, etc.
+        /// Incremented when changes are made to the level funnel
+        /// </summary>
+        public int levelFunnelVersion = 1;
     }
 }
 

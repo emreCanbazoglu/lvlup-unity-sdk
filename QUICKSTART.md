@@ -142,11 +142,125 @@ var config = new LvlUpConfig
     autoTrackSessions = true,       // Auto track sessions
     eventBatchSize = 50,            // Events per batch
     eventFlushInterval = 30f,       // Seconds between flushes
-    sendImmediately = false         // Send events immediately or batch
+    sendImmediately = false,        // Send events immediately or batch
+    levelFunnel = "live_v1",        // Level design variant name
+    levelFunnelVersion = 2          // Level design version number
 };
 
 LvlUpManager.Initialize(apiKey, baseUrl, config);
 ```
+
+### Level Funnel Tracking (A/B Testing Level Designs)
+
+Track different level designs to compare performance. Level funnel data is automatically added to all level events.
+
+#### Recommended: Dynamic Configuration (from Backend)
+
+```csharp
+using UnityEngine;
+using LvlUp;
+
+public class GameManager : MonoBehaviour
+{
+    void Start()
+    {
+        // Step 1: Initialize SDK
+        LvlUpManager.Initialize(
+            apiKey: "your_api_key",
+            baseUrl: "https://api.lvlup.com/api",
+            config: new LvlUpConfig { enableDebugLogs = true },
+            onComplete: OnSdkReady
+        );
+    }
+    
+    void OnSdkReady(bool success, string message)
+    {
+        if (success)
+        {
+            // Step 2: Fetch funnel assignment from backend
+            FetchFunnelAssignment();
+        }
+    }
+    
+    void FetchFunnelAssignment()
+    {
+        // Get from Remote Config or A/B Test
+        LvlUpManager.Instance.GetRemoteConfig("level_funnel", (response) =>
+        {
+            if (response.success)
+            {
+                string funnel = response.data["funnel"];        // e.g., "live_v1"
+                int version = (int)response.data["version"];    // e.g., 2
+                
+                // Step 3: Set the funnel
+                LvlUpManager.Instance.SetLevelFunnel(funnel, version);
+                
+                // Step 4: Start game - events now include funnel data
+                StartGame();
+            }
+        });
+    }
+    
+    void StartGame()
+    {
+        // All level events automatically include funnel data
+        LvlUpEvents.TrackLevelStart(1);
+        LvlUpEvents.TrackLevelComplete(1, 1000, 45.5f);
+    }
+}
+```
+
+#### Alternative: Static Configuration (Hardcoded)
+
+Use this only if your funnel is determined at build time:
+
+```csharp
+// Configure at initialization
+var config = new LvlUpConfig
+{
+    levelFunnel = "live_v1",        // Current level design
+    levelFunnelVersion = 2           // Version of this design
+};
+LvlUpManager.Initialize(apiKey, baseUrl, config);
+
+// Events automatically include funnel data
+LvlUpEvents.TrackLevelStart(1);
+```
+
+#### What Gets Tracked
+
+When you call:
+```csharp
+LvlUpEvents.TrackLevelStart(levelId: 1);
+```
+
+The backend receives:
+```json
+{
+  "eventName": "level_start",
+  "properties": { "levelId": 1 },
+  "levelFunnel": "live_v1",
+  "levelFunnelVersion": 2
+}
+```
+
+#### Dashboard Analytics
+
+In your dashboard, filter by:
+- **levelFunnel**: "live_v1", "live_v2", "test_hard", etc.
+- **levelFunnelVersion**: 1, 2, 3, etc.
+
+Compare metrics:
+- Win Rate, Fail Rate, Churn
+- Attempts Per Success (APS)
+- Completion/Fail durations
+- Booster usage, EGP rate
+
+**Use Cases:**
+- A/B test easy vs hard level designs
+- Track performance improvements across design iterations
+- Compare different tutorial flows
+- Measure impact of level layout changes
 
 ## Troubleshooting
 
