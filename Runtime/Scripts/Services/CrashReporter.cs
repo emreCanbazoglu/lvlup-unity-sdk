@@ -227,9 +227,9 @@ namespace LvlUp.Services
                     string json = JsonUtility.ToJson(report);
                     string endpoint = $"/games/{_gameId}/crashes";
                     
-                    _httpClient.Post(endpoint, json, (success, response) =>
+                    _httpClient.Post<object>(endpoint, json, (response) =>
                     {
-                        if (!success)
+                        if (!response.success)
                         {
                             Debug.LogWarning($"[LvlUp] Failed to send crash report: {response}");
                             // Re-queue failed reports
