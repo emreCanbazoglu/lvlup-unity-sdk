@@ -42,6 +42,11 @@ namespace LvlUp
         private UserMetadata _currentUserMetadata;
         private int _sessionNumber = 0;
         
+        // Heartbeat tracking
+        private Coroutine _heartbeatCoroutine;
+        private float _lastHeartbeatTime;
+        private const float HEARTBEAT_INTERVAL = 30f; // Send heartbeat every 30 seconds
+        
         // Cached geo data
         private GeoData _cachedGeoData;
 
@@ -159,17 +164,52 @@ namespace LvlUp
 
             if (pauseStatus)
             {
-                // App paused - end session
+                // App going to background - stop heartbeat
+                // Backend will auto-close session after 3 minutes of inactivity
+                StopHeartbeat();
+                
                 if (_config.autoTrackAppLifecycle)
                     TrackEvent("app_paused", null);
                 
                 FlushEventQueue();
+                
+                // Clear current session - it will be closed by backend timeout
+                // We'll start a new session when app resumes
+                _currentSession = null;
             }
             else
             {
-                // App resumed
+                // App resumed from background - start a NEW session
+                // Don't resume old session because:
+                // 1. Backend may have already closed it (after 3 min timeout)
+                // 2. Background time shouldn't count as playtime
+                // 3. Prevents data inconsistency with endTime
+                
                 if (_config.autoTrackAppLifecycle)
                     TrackEvent("app_resumed", null);
+                
+                // Start new session if we have a user
+                if (!string.IsNullOrEmpty(_currentUserId))
+                {
+                    _sessionNumber++; // Increment session number
+                    StartSession(_currentUserId, null);
+                }
+            }
+        }
+
+        private void Update()
+        {
+            // Safety check: Restart heartbeat if session exists but coroutine stopped
+            if (_currentSession != null && _heartbeatCoroutine == null && _isInitialized)
+            {
+                // Check if enough time has passed since last heartbeat
+                if (Time.realtimeSinceStartup - _lastHeartbeatTime > HEARTBEAT_INTERVAL * 2)
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning("[LvlUp] Heartbeat coroutine stopped unexpectedly, restarting...");
+                    
+                    StartHeartbeat();
+                }
             }
         }
 
@@ -182,8 +222,18 @@ namespace LvlUp
                 
                 FlushEventQueue();
                 
-                // End session synchronously before quitting
-                StartCoroutine(EndSessionCoroutine());
+                // Don't explicitly end session here - let heartbeat timeout handle it
+                // This prevents race conditions where:
+                // 1. EndSession is called
+                // 2. But heartbeats continue for a few more seconds
+                // 3. Creating inconsistent data (endTime set but lastHeartbeat continues)
+                //
+                // Instead:
+                // - Heartbeats stop naturally when app quits
+                // - Backend auto-closes session after 3 min timeout
+                // - Duration is calculated from lastHeartbeat
+                
+                StopHeartbeat();
             }
         }
 
@@ -238,6 +288,10 @@ namespace LvlUp
                 if (response.success)
                 {
                     _currentSession = response.data;
+                    
+                    // Start heartbeat coroutine
+                    StartHeartbeat();
+                    
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session started: {_currentSession.sessionId}");
                 }
@@ -282,6 +336,9 @@ namespace LvlUp
             {
                 if (response.success)
                 {
+                    // Stop heartbeat coroutine
+                    StopHeartbeat();
+                    
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session ended: {_currentSession.sessionId}");
                     _currentSession = null;
@@ -300,6 +357,95 @@ namespace LvlUp
             {
                 yield return null;
             }
+        }
+
+        #endregion
+
+        #region Heartbeat
+
+        /// <summary>
+        /// Start sending session heartbeats
+        /// </summary>
+        private void StartHeartbeat()
+        {
+            // Stop any existing heartbeat coroutine
+            StopHeartbeat();
+            
+            if (_currentSession != null)
+            {
+                _lastHeartbeatTime = Time.realtimeSinceStartup;
+                _heartbeatCoroutine = StartCoroutine(HeartbeatCoroutine());
+                
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Heartbeat started for session: {_currentSession.sessionId}");
+            }
+        }
+
+        /// <summary>
+        /// Stop sending session heartbeats
+        /// </summary>
+        private void StopHeartbeat()
+        {
+            if (_heartbeatCoroutine != null)
+            {
+                StopCoroutine(_heartbeatCoroutine);
+                _heartbeatCoroutine = null;
+                
+                if (_config.enableDebugLogs)
+                    Debug.Log("[LvlUp] Heartbeat stopped");
+            }
+        }
+
+        /// <summary>
+        /// Coroutine that sends heartbeats at regular intervals
+        /// Uses WaitForSecondsRealtime to work even when Time.timeScale = 0
+        /// </summary>
+        private IEnumerator HeartbeatCoroutine()
+        {
+            while (_currentSession != null && _isInitialized)
+            {
+                // Wait for the heartbeat interval using realtime (unaffected by Time.timeScale)
+                yield return new WaitForSecondsRealtime(HEARTBEAT_INTERVAL);
+                
+                // Double-check session still exists before sending
+                if (_currentSession != null && _isInitialized)
+                {
+                    SendHeartbeat();
+                }
+            }
+            
+            if (_config.enableDebugLogs)
+                Debug.Log("[LvlUp] Heartbeat coroutine ended");
+        }
+
+        /// <summary>
+        /// Send a single heartbeat to keep the session alive
+        /// </summary>
+        private void SendHeartbeat()
+        {
+            if (_currentSession == null)
+                return;
+
+            string endpoint = $"analytics/sessions/{_currentSession.sessionId}/heartbeat";
+            
+            // Send empty object instead of null to avoid JSON parsing errors
+            var emptyRequest = new { };
+            
+            StartCoroutine(_httpClient.Post<object>(endpoint, emptyRequest, response =>
+            {
+                if (response.success)
+                {
+                    _lastHeartbeatTime = Time.realtimeSinceStartup;
+                    
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Heartbeat sent for session: {_currentSession.sessionId}");
+                }
+                else
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Heartbeat failed: {response.error}");
+                }
+            }));
         }
 
         #endregion
