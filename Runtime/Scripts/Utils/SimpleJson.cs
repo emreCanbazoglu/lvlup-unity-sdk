@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using UnityEngine;
 
@@ -26,8 +27,18 @@ namespace LvlUp.Utils
             if (type == typeof(bool))
                 return obj.ToString().ToLower();
             
+            // Handle numeric types with invariant culture to avoid locale issues (e.g., comma as decimal separator in Turkish)
             if (type.IsPrimitive || type == typeof(decimal))
+            {
+                if (obj is float floatVal)
+                    return floatVal.ToString(CultureInfo.InvariantCulture);
+                if (obj is double doubleVal)
+                    return doubleVal.ToString(CultureInfo.InvariantCulture);
+                if (obj is decimal decimalVal)
+                    return decimalVal.ToString(CultureInfo.InvariantCulture);
+                
                 return obj.ToString();
+            }
 
             // Handle Dictionary
             if (obj is IDictionary dict)
