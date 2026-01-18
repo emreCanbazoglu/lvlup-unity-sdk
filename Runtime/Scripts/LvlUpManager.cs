@@ -54,6 +54,7 @@ namespace LvlUp
         private Queue<LvlUpEvent> _eventQueue = new Queue<LvlUpEvent>();
         private List<LvlUpEvent> _eventBatch = new List<LvlUpEvent>();
         private float _lastFlushTime;
+        private bool _hasLoadedPersistedEvents = false;
 
         // State
         private bool _isInitialized = false;
@@ -61,6 +62,8 @@ namespace LvlUp
         
         // PlayerPrefs keys for persistence
         private const string PREF_SESSION_NUMBER = "LvlUp_SessionNumber";
+        private const string PREF_OFFLINE_EVENTS = "LvlUp_OfflineEvents";
+        private const string PREF_OFFLINE_EVENT_COUNT = "LvlUp_OfflineEventCount";
 
         #region Initialization
 
@@ -102,6 +105,9 @@ namespace LvlUp
             
             _isInitialized = true;
             _lastFlushTime = Time.time;
+
+            // Load persisted offline events from previous session
+            LoadPersistedEvents();
 
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] SDK Initialized - Base URL: {_baseUrl}");
@@ -171,6 +177,9 @@ namespace LvlUp
                 if (_config.autoTrackAppLifecycle)
                     TrackEvent("app_paused", null);
                 
+                // Persist any pending events before going to background
+                PersistEvents();
+                
                 FlushEventQueue();
                 
                 // Clear current session - it will be closed by backend timeout
@@ -219,6 +228,9 @@ namespace LvlUp
             {
                 if (_config.autoTrackAppLifecycle)
                     TrackEvent("app_quit", null);
+                
+                // Persist events before quitting
+                PersistEvents();
                 
                 FlushEventQueue();
                 
@@ -673,13 +685,36 @@ namespace LvlUp
             }
 
             var eventsToSend = new List<LvlUpEvent>(_eventBatch);
-            _eventBatch.Clear();
+            // Don't clear yet - wait for confirmation
             _isSendingEvents = true;
 
             TrackEventsBatch(eventsToSend, response =>
             {
                 _isSendingEvents = false;
                 _lastFlushTime = Time.time;
+                
+                if (response.success)
+                {
+                    // Success - remove sent events from batch
+                    // Remove only the events we just sent (in case new ones were added)
+                    for (int i = 0; i < eventsToSend.Count && _eventBatch.Count > 0; i++)
+                    {
+                        _eventBatch.RemoveAt(0);
+                    }
+                    
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Successfully sent {eventsToSend.Count} events");
+                }
+                else
+                {
+                    // Failed - events stay in queue for retry
+                    // Persist them in case app quits
+                    PersistEvents();
+                    
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Failed to send events: {response.error}. Will retry later.");
+                }
+                
                 callback?.Invoke(response);
             });
         }
@@ -916,6 +951,108 @@ namespace LvlUp
         }
 
         #endregion
+
+        #region Offline Event Persistence
+
+        /// <summary>
+        /// Persist offline events to PlayerPrefs
+        /// </summary>
+        private void PersistEvents()
+        {
+            if (_eventBatch.Count == 0)
+            {
+                // Clear persisted events if none to save
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENTS);
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENT_COUNT);
+                PlayerPrefs.Save();
+                return;
+            }
+
+            try
+            {
+                // Convert events to JSON array
+                var eventsJson = new List<string>();
+                foreach (var evt in _eventBatch)
+                {
+                    string json = JsonUtility.ToJson(evt);
+                    eventsJson.Add(json);
+                }
+
+                // Store each event with an index (PlayerPrefs has size limits)
+                PlayerPrefs.SetInt(PREF_OFFLINE_EVENT_COUNT, eventsJson.Count);
+                for (int i = 0; i < eventsJson.Count; i++)
+                {
+                    PlayerPrefs.SetString($"{PREF_OFFLINE_EVENTS}_{i}", eventsJson[i]);
+                }
+                PlayerPrefs.Save();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Persisted {eventsJson.Count} offline events");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to persist events: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Load persisted offline events from PlayerPrefs
+        /// </summary>
+        private void LoadPersistedEvents()
+        {
+            if (_hasLoadedPersistedEvents)
+                return;
+
+            _hasLoadedPersistedEvents = true;
+
+            try
+            {
+                int count = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
+                if (count == 0)
+                    return;
+
+                int loadedCount = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    string key = $"{PREF_OFFLINE_EVENTS}_{i}";
+                    if (PlayerPrefs.HasKey(key))
+                    {
+                        string json = PlayerPrefs.GetString(key);
+                        try
+                        {
+                            var evt = JsonUtility.FromJson<LvlUpEvent>(json);
+                            if (evt != null)
+                            {
+                                _eventBatch.Add(evt);
+                                loadedCount++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[LvlUp] Failed to deserialize event {i}: {ex.Message}");
+                        }
+                        
+                        // Clean up this entry
+                        PlayerPrefs.DeleteKey(key);
+                    }
+                }
+
+                // Clean up count
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENT_COUNT);
+                PlayerPrefs.Save();
+
+                if (loadedCount > 0 && _config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline events");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to load persisted events: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }
+
+
 
