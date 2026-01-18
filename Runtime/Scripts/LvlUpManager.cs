@@ -42,6 +42,11 @@ namespace LvlUp
         private UserMetadata _currentUserMetadata;
         private int _sessionNumber = 0;
         
+        // Offline session tracking - support multiple offline sessions
+        private List<SessionStartRequest> _pendingSessionStarts = new List<SessionStartRequest>();
+        private List<SessionEndRequest> _pendingSessionEnds = new List<SessionEndRequest>();
+        private bool _hasOfflineSession = false;
+        
         // Heartbeat tracking
         private Coroutine _heartbeatCoroutine;
         private float _lastHeartbeatTime;
@@ -64,6 +69,10 @@ namespace LvlUp
         private const string PREF_SESSION_NUMBER = "LvlUp_SessionNumber";
         private const string PREF_OFFLINE_EVENTS = "LvlUp_OfflineEvents";
         private const string PREF_OFFLINE_EVENT_COUNT = "LvlUp_OfflineEventCount";
+        private const string PREF_PENDING_SESSION_STARTS = "LvlUp_PendingSessionStarts";
+        private const string PREF_PENDING_SESSION_START_COUNT = "LvlUp_PendingSessionStartCount";
+        private const string PREF_PENDING_SESSION_ENDS = "LvlUp_PendingSessionEnds";
+        private const string PREF_PENDING_SESSION_END_COUNT = "LvlUp_PendingSessionEndCount";
 
         #region Initialization
 
@@ -108,6 +117,9 @@ namespace LvlUp
 
             // Load persisted offline events from previous session
             LoadPersistedEvents();
+            
+            // Load pending sessions from previous session
+            LoadPendingSessions();
 
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] SDK Initialized - Base URL: {_baseUrl}");
@@ -300,12 +312,26 @@ namespace LvlUp
                 if (response.success)
                 {
                     _currentSession = response.data;
+                    _hasOfflineSession = false;
                     
                     // Start heartbeat coroutine
                     StartHeartbeat();
                     
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session started: {_currentSession.sessionId}");
+                }
+                else
+                {
+                    // Failed to start session (likely offline)
+                    // Add to list of pending session starts
+                    _pendingSessionStarts.Add(request);
+                    _hasOfflineSession = true;
+                    
+                    // Persist all pending sessions
+                    PersistPendingSessions();
+                    
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Failed to start session (offline?). Queued for retry. Total pending: {_pendingSessionStarts.Count}");
                 }
                 callback?.Invoke(response);
             }));
@@ -316,7 +342,7 @@ namespace LvlUp
         /// </summary>
         public void EndSession(Action<ApiResponse<SessionData>> callback = null)
         {
-            if (_currentSession == null)
+            if (_currentSession == null && !_hasOfflineSession)
             {
                 callback?.Invoke(new ApiResponse<SessionData> { success = false, error = "No active session" });
                 return;
@@ -325,7 +351,7 @@ namespace LvlUp
             // SessionEndRequest auto-populates all metadata via LvlUpEvent constructor
             var request = new SessionEndRequest
             {
-                sessionId = _currentSession.sessionId,
+                sessionId = _currentSession?.sessionId,
                 sessionNum = _sessionNumber
             };
             
@@ -343,6 +369,20 @@ namespace LvlUp
                 );
             }
 
+            // If we have an offline session, just store the end request
+            if (_hasOfflineSession && _currentSession == null)
+            {
+                _pendingSessionEnds.Add(request);
+                
+                // Persist all pending sessions
+                PersistPendingSessions();
+                
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Offline session end queued. Total pending ends: {_pendingSessionEnds.Count}");
+                
+                callback?.Invoke(new ApiResponse<SessionData> { success = true, message = "Offline session end queued" });
+                return;
+            }
 
             StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{_currentSession.sessionId}", request, response =>
             {
@@ -354,6 +394,17 @@ namespace LvlUp
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session ended: {_currentSession.sessionId}");
                     _currentSession = null;
+                }
+                else
+                {
+                    // Failed to end session - add to pending list
+                    _pendingSessionEnds.Add(request);
+                    
+                    // Persist all pending sessions
+                    PersistPendingSessions();
+                    
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Failed to end session. Queued for retry. Total pending ends: {_pendingSessionEnds.Count}");
                 }
                 callback?.Invoke(response);
             }));
@@ -678,6 +729,9 @@ namespace LvlUp
         /// </summary>
         public void FlushEventQueue(Action<ApiResponse> callback = null)
         {
+            // First, try to send any pending sessions
+            RetryPendingSessions();
+            
             if (_eventBatch.Count == 0 || _isSendingEvents)
             {
                 callback?.Invoke(new ApiResponse { success = true, message = "No events to flush" });
@@ -1051,8 +1105,277 @@ namespace LvlUp
         }
 
         #endregion
+
+        #region Offline Session Persistence
+
+        /// <summary>
+        /// Persist pending session requests to PlayerPrefs
+        /// </summary>
+        private void PersistPendingSessions()
+        {
+            try
+            {
+                // Persist session starts
+                PlayerPrefs.SetInt(PREF_PENDING_SESSION_START_COUNT, _pendingSessionStarts.Count);
+                for (int i = 0; i < _pendingSessionStarts.Count; i++)
+                {
+                    string json = JsonUtility.ToJson(_pendingSessionStarts[i]);
+                    PlayerPrefs.SetString($"{PREF_PENDING_SESSION_STARTS}_{i}", json);
+                }
+
+                // Persist session ends
+                PlayerPrefs.SetInt(PREF_PENDING_SESSION_END_COUNT, _pendingSessionEnds.Count);
+                for (int i = 0; i < _pendingSessionEnds.Count; i++)
+                {
+                    string json = JsonUtility.ToJson(_pendingSessionEnds[i]);
+                    PlayerPrefs.SetString($"{PREF_PENDING_SESSION_ENDS}_{i}", json);
+                }
+
+                PlayerPrefs.Save();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Persisted {_pendingSessionStarts.Count} session starts and {_pendingSessionEnds.Count} session ends");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to persist pending sessions: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Load pending session requests from PlayerPrefs
+        /// </summary>
+        private void LoadPendingSessions()
+        {
+            try
+            {
+                // Load pending session starts
+                int startCount = PlayerPrefs.GetInt(PREF_PENDING_SESSION_START_COUNT, 0);
+                for (int i = 0; i < startCount; i++)
+                {
+                    string key = $"{PREF_PENDING_SESSION_STARTS}_{i}";
+                    if (PlayerPrefs.HasKey(key))
+                    {
+                        string json = PlayerPrefs.GetString(key);
+                        try
+                        {
+                            var request = JsonUtility.FromJson<SessionStartRequest>(json);
+                            if (request != null)
+                            {
+                                _pendingSessionStarts.Add(request);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[LvlUp] Failed to deserialize session start {i}: {ex.Message}");
+                        }
+                        
+                        // Clean up
+                        PlayerPrefs.DeleteKey(key);
+                    }
+                }
+
+                // Load pending session ends
+                int endCount = PlayerPrefs.GetInt(PREF_PENDING_SESSION_END_COUNT, 0);
+                for (int i = 0; i < endCount; i++)
+                {
+                    string key = $"{PREF_PENDING_SESSION_ENDS}_{i}";
+                    if (PlayerPrefs.HasKey(key))
+                    {
+                        string json = PlayerPrefs.GetString(key);
+                        try
+                        {
+                            var request = JsonUtility.FromJson<SessionEndRequest>(json);
+                            if (request != null)
+                            {
+                                _pendingSessionEnds.Add(request);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[LvlUp] Failed to deserialize session end {i}: {ex.Message}");
+                        }
+                        
+                        // Clean up
+                        PlayerPrefs.DeleteKey(key);
+                    }
+                }
+
+                // Clean up counts
+                PlayerPrefs.DeleteKey(PREF_PENDING_SESSION_START_COUNT);
+                PlayerPrefs.DeleteKey(PREF_PENDING_SESSION_END_COUNT);
+                PlayerPrefs.Save();
+
+                if (_pendingSessionStarts.Count > 0 || _pendingSessionEnds.Count > 0)
+                {
+                    _hasOfflineSession = true;
+                    
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Loaded {_pendingSessionStarts.Count} pending session starts and {_pendingSessionEnds.Count} session ends from previous session");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to load pending sessions: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Retry sending pending session start/end requests
+        /// Called when network comes back or events are flushed
+        /// Processes sessions in order to maintain temporal sequence
+        /// </summary>
+        private void RetryPendingSessions()
+        {
+            // Process all pending session starts first (in order)
+            if (_pendingSessionStarts.Count > 0)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Retrying {_pendingSessionStarts.Count} pending session starts...");
+
+                // Process sessions one at a time to maintain order
+                StartCoroutine(ProcessPendingSessionStarts());
+            }
+        }
+
+        /// <summary>
+        /// Process pending session starts sequentially
+        /// </summary>
+        private IEnumerator ProcessPendingSessionStarts()
+        {
+            while (_pendingSessionStarts.Count > 0)
+            {
+                var request = _pendingSessionStarts[0];
+                bool completed = false;
+                bool success = false;
+
+                StartCoroutine(_httpClient.Post<SessionData>("analytics/sessions", request, response =>
+                {
+                    success = response.success;
+                    completed = true;
+                    
+                    if (response.success)
+                    {
+                        if (_config.enableDebugLogs)
+                            Debug.Log($"[LvlUp] Successfully started offline session: {response.data.sessionId}");
+                    }
+                    else
+                    {
+                        if (_config.enableDebugLogs)
+                            Debug.LogWarning($"[LvlUp] Still cannot start session (offline?): {response.error}");
+                    }
+                }));
+
+                // Wait for completion
+                yield return new WaitUntil(() => completed);
+
+                if (success)
+                {
+                    // Remove from pending list
+                    _pendingSessionStarts.RemoveAt(0);
+                    
+                    // Update persistence
+                    PersistPendingSessions();
+                }
+                else
+                {
+                    // Stop retrying if still failing (still offline)
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Stopping session retry - still offline. {_pendingSessionStarts.Count} sessions remain queued.");
+                    yield break;
+                }
+
+                // Small delay between requests
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // All session starts processed, now process ends
+            if (_pendingSessionEnds.Count > 0)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
+
+                StartCoroutine(ProcessPendingSessionEnds());
+            }
+
+            // Update offline flag
+            if (_pendingSessionStarts.Count == 0 && _pendingSessionEnds.Count == 0)
+            {
+                _hasOfflineSession = false;
+            }
+        }
+
+        /// <summary>
+        /// Process pending session ends sequentially
+        /// </summary>
+        private IEnumerator ProcessPendingSessionEnds()
+        {
+            while (_pendingSessionEnds.Count > 0)
+            {
+                var request = _pendingSessionEnds[0];
+                
+                // Session ends might not have sessionId if they were offline
+                // In that case, we can't send them - just remove
+                if (string.IsNullOrEmpty(request.sessionId))
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Removing session end with no sessionId (offline session never started)");
+                    
+                    _pendingSessionEnds.RemoveAt(0);
+                    PersistPendingSessions();
+                    continue;
+                }
+
+                bool completed = false;
+                bool success = false;
+
+                StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{request.sessionId}", request, response =>
+                {
+                    success = response.success;
+                    completed = true;
+                    
+                    if (response.success)
+                    {
+                        if (_config.enableDebugLogs)
+                            Debug.Log($"[LvlUp] Successfully ended offline session: {request.sessionId}");
+                    }
+                    else
+                    {
+                        if (_config.enableDebugLogs)
+                            Debug.LogWarning($"[LvlUp] Failed to end session: {response.error}");
+                    }
+                }));
+
+                // Wait for completion
+                yield return new WaitUntil(() => completed);
+
+                if (success)
+                {
+                    // Remove from pending list
+                    _pendingSessionEnds.RemoveAt(0);
+                    
+                    // Update persistence
+                    PersistPendingSessions();
+                }
+                else
+                {
+                    // Stop retrying if still failing
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Stopping session end retry. {_pendingSessionEnds.Count} session ends remain queued.");
+                    yield break;
+                }
+
+                // Small delay between requests
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // Update offline flag
+            if (_pendingSessionStarts.Count == 0 && _pendingSessionEnds.Count == 0)
+            {
+                _hasOfflineSession = false;
+            }
+        }
+
+        #endregion
     }
 }
-
-
-
