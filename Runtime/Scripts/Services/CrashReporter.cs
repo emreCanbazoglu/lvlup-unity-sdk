@@ -63,7 +63,11 @@ namespace LvlUp.Services
             // Check if it's time to send batched crash reports
             if (Time.realtimeSinceStartup - _lastBatchSendTime >= BATCH_SEND_INTERVAL)
             {
-                SendCrashReports();
+                if (_crashQueue.Count > 0)
+                {
+                    Debug.Log($"[LvlUp CrashReporter] Batch send timer triggered. Queue size: {_crashQueue.Count}");
+                    SendCrashReports();
+                }
                 _lastBatchSendTime = Time.realtimeSinceStartup;
             }
         }
@@ -180,7 +184,13 @@ namespace LvlUp.Services
             string exceptionType = null,
             Dictionary<string, object> customData = null)
         {
-            if (!_isEnabled) return;
+            if (!_isEnabled)
+            {
+                Debug.Log("[LvlUp CrashReporter] Crash reporting is disabled");
+                return;
+            }
+
+            Debug.Log($"[LvlUp CrashReporter] Reporting crash: {crashType} / {severity} / {message}");
 
             try
             {
@@ -223,11 +233,17 @@ namespace LvlUp.Services
                 };
 
                 _crashQueue.Enqueue(report);
+                Debug.Log($"[LvlUp CrashReporter] Crash queued. Queue size: {_crashQueue.Count}");
                 
                 // Send immediately for high priority crashes
                 if (severity == "CRITICAL" || severity == "HIGH")
                 {
+                    Debug.Log("[LvlUp CrashReporter] High priority crash - sending immediately");
                     SendCrashReports();
+                }
+                else
+                {
+                    Debug.Log($"[LvlUp CrashReporter] Normal priority crash - will send in batch (severity: {severity})");
                 }
             }
             catch (Exception ex)
@@ -241,7 +257,13 @@ namespace LvlUp.Services
         /// </summary>
         public void SendCrashReports()
         {
-            if (_crashQueue.Count == 0) return;
+            if (_crashQueue.Count == 0)
+            {
+                Debug.Log("[LvlUp CrashReporter] No crash reports in queue");
+                return;
+            }
+
+            Debug.Log($"[LvlUp CrashReporter] Sending {_crashQueue.Count} crash report(s)");
 
             while (_crashQueue.Count > 0)
             {
@@ -252,13 +274,20 @@ namespace LvlUp.Services
                     string json = JsonUtility.ToJson(report);
                     string endpoint = $"/games/{_gameId}/crashes";
                     
+                    Debug.Log($"[LvlUp CrashReporter] POST {endpoint}");
+                    Debug.Log($"[LvlUp CrashReporter] Payload: {json}");
+                    
                     _httpClient.Post<object>(endpoint, json, (response) =>
                     {
                         if (!response.success)
                         {
-                            Debug.LogWarning($"[LvlUp] Failed to send crash report: {response}");
+                            Debug.LogWarning($"[LvlUp] Failed to send crash report: {response.error}");
                             // Re-queue failed reports
                             _crashQueue.Enqueue(report);
+                        }
+                        else
+                        {
+                            Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
                         }
                     });
                 }
