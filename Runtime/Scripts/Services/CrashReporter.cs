@@ -18,13 +18,13 @@ namespace LvlUp.Services
         private readonly string _apiKey;
         private readonly string _userId;
         private readonly string _sessionId;
-        private readonly Queue<CrashReport> _crashQueue = new Queue<CrashReport>();
         private readonly Dictionary<CrashReport, int> _failedReports = new Dictionary<CrashReport, int>();
         private bool _isEnabled = true;
         private bool _autoCapture = true;
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 50;
         private const int MAX_RETRY_ATTEMPTS = 3;
+        private bool _isReporting = false; // Prevent recursive crash reporting
 
         public CrashReporter(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner, string apiKey, string userId = null, string sessionId = null)
         {
@@ -171,8 +171,16 @@ namespace LvlUp.Services
                 return;
             }
 
+            // Prevent infinite loop: if we're already reporting a crash, don't report crashes from the crash reporter itself
+            if (_isReporting)
+            {
+                Debug.LogWarning("[LvlUp CrashReporter] Already reporting a crash, skipping to prevent infinite loop");
+                return;
+            }
+
             Debug.Log($"[LvlUp CrashReporter] Reporting crash: {crashType} / {severity} / {message}");
 
+            _isReporting = true;
             try
             {
                 var report = new CrashReport
@@ -213,36 +221,15 @@ namespace LvlUp.Services
                     Timestamp = DateTime.UtcNow
                 };
 
-                _crashQueue.Enqueue(report);
-                Debug.Log($"[LvlUp CrashReporter] Crash queued. Queue size: {_crashQueue.Count}");
-                
                 // Send immediately
                 Debug.Log("[LvlUp CrashReporter] Sending crash report immediately");
-                SendCrashReports();
+                SendSingleCrashReport(report);
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to create crash report: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Send all queued crash reports to the backend immediately (fire and forget)
-        /// </summary>
-        public void SendCrashReports()
-        {
-            if (_crashQueue.Count == 0)
-            {
-                return;
-            }
-
-            Debug.Log($"[LvlUp CrashReporter] Sending {_crashQueue.Count} crash report(s) immediately");
-
-            // Send all queued reports immediately without waiting
-            while (_crashQueue.Count > 0)
-            {
-                var report = _crashQueue.Dequeue();
-                SendSingleCrashReport(report);
+                // Reset flag on exception during report creation
+                _isReporting = false;
             }
         }
 
@@ -251,47 +238,65 @@ namespace LvlUp.Services
         /// </summary>
         private void SendSingleCrashReport(CrashReport report)
         {
-            // API key is sent in X-API-Key header, not in URL (same pattern as event tracking)
-            string endpoint = "/crashes";
-            
-            Debug.Log($"[LvlUp CrashReporter] POST {endpoint} - {report.Message}");
-            
-            // Send the crash report (fire and forget with callback for retry logic)
-            _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, report, (response) =>
+            try
             {
-                if (!response.success)
+                // API key is sent in X-API-Key header, not in URL (same pattern as event tracking)
+                string endpoint = "/crashes";
+                
+                Debug.Log($"[LvlUp CrashReporter] POST {endpoint} - {report.Message}");
+                
+                // Send the crash report (fire and forget with callback for retry logic)
+                _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, report, (response) =>
                 {
-                    Debug.LogWarning($"[LvlUp CrashReporter] Failed to send crash report: {response.error}");
-                    
-                    // Track retry attempts
-                    if (!_failedReports.ContainsKey(report))
+                    try
                     {
-                        _failedReports[report] = 1;
-                    }
-                    else
-                    {
-                        _failedReports[report]++;
-                    }
+                        if (!response.success)
+                        {
+                            Debug.LogWarning($"[LvlUp CrashReporter] Failed to send crash report: {response.error}");
+                            
+                            // Track retry attempts
+                            if (!_failedReports.ContainsKey(report))
+                            {
+                                _failedReports[report] = 1;
+                            }
+                            else
+                            {
+                                _failedReports[report]++;
+                            }
 
-                    // Re-queue if under retry limit
-                    if (_failedReports[report] < MAX_RETRY_ATTEMPTS)
-                    {
-                        _crashQueue.Enqueue(report);
-                        Debug.Log($"[LvlUp CrashReporter] Will retry crash report (attempt {_failedReports[report]}/{MAX_RETRY_ATTEMPTS})");
+                            // Log if max retries reached
+                            if (_failedReports[report] >= MAX_RETRY_ATTEMPTS)
+                            {
+                                Debug.LogError($"[LvlUp CrashReporter] Dropping crash report after {MAX_RETRY_ATTEMPTS} failed attempts: {report.Message}");
+                                _failedReports.Remove(report);
+                            }
+                        }
+                        else
+                        {
+                            Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
+                            // Remove from failed reports if it was there
+                            _failedReports.Remove(report);
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        Debug.LogError($"[LvlUp CrashReporter] Dropping crash report after {MAX_RETRY_ATTEMPTS} failed attempts: {report.Message}");
-                        _failedReports.Remove(report);
+                        // Catch exceptions in callback to prevent infinite loop
+                        Debug.LogError($"[LvlUp CrashReporter] Exception in crash report callback: {ex.Message}");
                     }
-                }
-                else
-                {
-                    Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
-                    // Remove from failed reports if it was there
-                    _failedReports.Remove(report);
-                }
-            }));
+                    finally
+                    {
+                        // Reset reporting flag after callback completes (whether success or failure)
+                        _isReporting = false;
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                // Catch exceptions during report sending to prevent infinite loop
+                Debug.LogError($"[LvlUp CrashReporter] Exception while sending crash report: {ex.Message}");
+                // Reset flag if exception occurs before coroutine starts
+                _isReporting = false;
+            }
         }
 
         /// <summary>
