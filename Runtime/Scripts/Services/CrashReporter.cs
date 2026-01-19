@@ -25,10 +25,6 @@ namespace LvlUp.Services
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 50;
         private const int MAX_RETRY_ATTEMPTS = 3;
-        
-        // Batch sending configuration
-        private float _lastBatchSendTime;
-        private const float BATCH_SEND_INTERVAL = 30f; // Send batches every 30 seconds
 
         public CrashReporter(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner, string apiKey, string userId = null, string sessionId = null)
         {
@@ -37,7 +33,6 @@ namespace LvlUp.Services
             _apiKey = apiKey;
             _userId = userId;
             _sessionId = sessionId;
-            _lastBatchSendTime = Time.realtimeSinceStartup;
         }
 
         /// <summary>
@@ -57,25 +52,6 @@ namespace LvlUp.Services
             }
         }
         
-        /// <summary>
-        /// Update method - should be called regularly (e.g., from MonoBehaviour Update)
-        /// Handles periodic batch sending of crash reports
-        /// </summary>
-        public void Update()
-        {
-            if (!_isEnabled) return;
-            
-            // Check if it's time to send batched crash reports
-            if (Time.realtimeSinceStartup - _lastBatchSendTime >= BATCH_SEND_INTERVAL)
-            {
-                if (_crashQueue.Count > 0)
-                {
-                    Debug.Log($"[LvlUp CrashReporter] Batch send timer triggered. Queue size: {_crashQueue.Count}");
-                    SendCrashReports();
-                }
-                _lastBatchSendTime = Time.realtimeSinceStartup;
-            }
-        }
 
         /// <summary>
         /// Enable or disable automatic exception capture
@@ -240,16 +216,9 @@ namespace LvlUp.Services
                 _crashQueue.Enqueue(report);
                 Debug.Log($"[LvlUp CrashReporter] Crash queued. Queue size: {_crashQueue.Count}");
                 
-                // Send immediately for high priority crashes
-                if (severity == "CRITICAL" || severity == "HIGH")
-                {
-                    Debug.Log("[LvlUp CrashReporter] High priority crash - sending immediately");
-                    SendCrashReports();
-                }
-                else
-                {
-                    Debug.Log($"[LvlUp CrashReporter] Normal priority crash - will send in batch (severity: {severity})");
-                }
+                // Send immediately
+                Debug.Log("[LvlUp CrashReporter] Sending crash report immediately");
+                SendCrashReports();
             }
             catch (Exception ex)
             {

@@ -220,12 +220,6 @@ namespace LvlUp
 
         private void Update()
         {
-            // Update crash reporter for periodic batch sending
-            if (_isInitialized && _crashReporter != null)
-            {
-                _crashReporter.Update();
-            }
-            
             // Safety check: Restart heartbeat if session exists but coroutine stopped
             if (_currentSession != null && _heartbeatCoroutine == null && _isInitialized)
             {
