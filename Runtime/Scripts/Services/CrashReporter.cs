@@ -301,80 +301,75 @@ namespace LvlUp.Services
             {
                 bool completed = false;
                 bool success = false;
+                string errorMessage = null;
 
-                try
+                // API key is used as the game identifier in the endpoint
+                string endpoint = $"/games/{_apiKey}/crashes";
+                
+                Debug.Log($"[LvlUp CrashReporter] POST {endpoint} - {report.Message}");
+                
+                // Send the crash report
+                _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, report, (response) =>
                 {
-                    // API key is used as the game identifier in the endpoint
-                    string endpoint = $"/games/{_apiKey}/crashes";
+                    success = response.success;
+                    completed = true;
+                    errorMessage = response.error;
                     
-                    Debug.Log($"[LvlUp CrashReporter] POST {endpoint} - {report.Message}");
-                    
-                    // Send the crash report
-                    _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, report, (response) =>
+                    if (!response.success)
                     {
-                        success = response.success;
-                        completed = true;
-                        
-                        if (!response.success)
-                        {
-                            Debug.LogWarning($"[LvlUp CrashReporter] Failed to send crash report: {response.error}");
-                        }
-                        else
-                        {
-                            Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
-                        }
-                    }));
-
-                    // Wait for the request to complete (with timeout)
-                    float startTime = Time.realtimeSinceStartup;
-                    while (!completed && (Time.realtimeSinceStartup - startTime) < 10f)
-                    {
-                        yield return null;
-                    }
-
-                    if (!completed)
-                    {
-                        Debug.LogWarning("[LvlUp CrashReporter] Crash report request timed out");
-                        success = false;
-                    }
-
-                    if (success)
-                    {
-                        successCount++;
-                        // Remove from failed reports if it was there
-                        _failedReports.Remove(report);
+                        Debug.LogWarning($"[LvlUp CrashReporter] Failed to send crash report: {response.error}");
                     }
                     else
                     {
-                        failedCount++;
-                        
-                        // Track retry attempts
-                        if (!_failedReports.ContainsKey(report))
-                        {
-                            _failedReports[report] = 1;
-                        }
-                        else
-                        {
-                            _failedReports[report]++;
-                        }
-
-                        // Re-queue if under retry limit
-                        if (_failedReports[report] < MAX_RETRY_ATTEMPTS)
-                        {
-                            _crashQueue.Enqueue(report);
-                            Debug.Log($"[LvlUp CrashReporter] Will retry crash report (attempt {_failedReports[report]}/{MAX_RETRY_ATTEMPTS})");
-                        }
-                        else
-                        {
-                            Debug.LogError($"[LvlUp CrashReporter] Dropping crash report after {MAX_RETRY_ATTEMPTS} failed attempts: {report.Message}");
-                            _failedReports.Remove(report);
-                        }
+                        Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
                     }
-                }
-                catch (Exception ex)
+                }));
+
+                // Wait for the request to complete (with timeout)
+                float startTime = Time.realtimeSinceStartup;
+                while (!completed && (Time.realtimeSinceStartup - startTime) < 10f)
                 {
-                    Debug.LogError($"[LvlUp CrashReporter] Error sending crash report: {ex.Message}");
+                    yield return null;
+                }
+
+                if (!completed)
+                {
+                    Debug.LogWarning("[LvlUp CrashReporter] Crash report request timed out");
+                    success = false;
+                }
+
+                // Handle success/failure outside of yield scope
+                if (success)
+                {
+                    successCount++;
+                    // Remove from failed reports if it was there
+                    _failedReports.Remove(report);
+                }
+                else
+                {
                     failedCount++;
+                    
+                    // Track retry attempts
+                    if (!_failedReports.ContainsKey(report))
+                    {
+                        _failedReports[report] = 1;
+                    }
+                    else
+                    {
+                        _failedReports[report]++;
+                    }
+
+                    // Re-queue if under retry limit
+                    if (_failedReports[report] < MAX_RETRY_ATTEMPTS)
+                    {
+                        _crashQueue.Enqueue(report);
+                        Debug.Log($"[LvlUp CrashReporter] Will retry crash report (attempt {_failedReports[report]}/{MAX_RETRY_ATTEMPTS})");
+                    }
+                    else
+                    {
+                        Debug.LogError($"[LvlUp CrashReporter] Dropping crash report after {MAX_RETRY_ATTEMPTS} failed attempts: {report.Message}");
+                        _failedReports.Remove(report);
+                    }
                 }
 
                 // Small delay between reports to avoid overwhelming the server
