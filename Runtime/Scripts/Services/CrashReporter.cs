@@ -22,7 +22,6 @@ namespace LvlUp.Services
         private readonly Dictionary<CrashReport, int> _failedReports = new Dictionary<CrashReport, int>();
         private bool _isEnabled = true;
         private bool _autoCapture = true;
-        private bool _isSending = false; // Prevent concurrent sending
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 50;
         private const int MAX_RETRY_ATTEMPTS = 3;
@@ -259,7 +258,7 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Send all queued crash reports to the backend
+        /// Send all queued crash reports to the backend immediately (fire and forget)
         /// </summary>
         public void SendCrashReports()
         {
@@ -268,86 +267,32 @@ namespace LvlUp.Services
                 return;
             }
 
-            // Prevent concurrent sending
-            if (_isSending)
-            {
-                Debug.Log("[LvlUp CrashReporter] Already sending crash reports, skipping...");
-                return;
-            }
+            Debug.Log($"[LvlUp CrashReporter] Sending {_crashQueue.Count} crash report(s) immediately");
 
-            _isSending = true;
-            Debug.Log($"[LvlUp CrashReporter] Sending {_crashQueue.Count} crash report(s)");
-
-            // Create a list of reports to send (process entire queue at once)
-            var reportsToSend = new List<CrashReport>();
+            // Send all queued reports immediately without waiting
             while (_crashQueue.Count > 0)
             {
-                reportsToSend.Add(_crashQueue.Dequeue());
+                var report = _crashQueue.Dequeue();
+                SendSingleCrashReport(report);
             }
-
-            // Send each report
-            _coroutineRunner.StartCoroutine(SendCrashReportsCoroutine(reportsToSend));
         }
 
         /// <summary>
-        /// Coroutine to send crash reports sequentially
+        /// Send a single crash report asynchronously
         /// </summary>
-        private IEnumerator SendCrashReportsCoroutine(List<CrashReport> reports)
+        private void SendSingleCrashReport(CrashReport report)
         {
-            int successCount = 0;
-            int failedCount = 0;
-
-            foreach (var report in reports)
+            // API key is sent in X-API-Key header, not in URL (same pattern as event tracking)
+            string endpoint = "/crashes";
+            
+            Debug.Log($"[LvlUp CrashReporter] POST {endpoint} - {report.Message}");
+            
+            // Send the crash report (fire and forget with callback for retry logic)
+            _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, report, (response) =>
             {
-                bool completed = false;
-                bool success = false;
-                string errorMessage = null;
-
-                // API key is used as the game identifier in the endpoint
-                string endpoint = $"/games/{_apiKey}/crashes";
-                
-                Debug.Log($"[LvlUp CrashReporter] POST {endpoint} - {report.Message}");
-                
-                // Send the crash report
-                _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, report, (response) =>
+                if (!response.success)
                 {
-                    success = response.success;
-                    completed = true;
-                    errorMessage = response.error;
-                    
-                    if (!response.success)
-                    {
-                        Debug.LogWarning($"[LvlUp CrashReporter] Failed to send crash report: {response.error}");
-                    }
-                    else
-                    {
-                        Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
-                    }
-                }));
-
-                // Wait for the request to complete (with timeout)
-                float startTime = Time.realtimeSinceStartup;
-                while (!completed && (Time.realtimeSinceStartup - startTime) < 10f)
-                {
-                    yield return null;
-                }
-
-                if (!completed)
-                {
-                    Debug.LogWarning("[LvlUp CrashReporter] Crash report request timed out");
-                    success = false;
-                }
-
-                // Handle success/failure outside of yield scope
-                if (success)
-                {
-                    successCount++;
-                    // Remove from failed reports if it was there
-                    _failedReports.Remove(report);
-                }
-                else
-                {
-                    failedCount++;
+                    Debug.LogWarning($"[LvlUp CrashReporter] Failed to send crash report: {response.error}");
                     
                     // Track retry attempts
                     if (!_failedReports.ContainsKey(report))
@@ -371,13 +316,13 @@ namespace LvlUp.Services
                         _failedReports.Remove(report);
                     }
                 }
-
-                // Small delay between reports to avoid overwhelming the server
-                yield return new WaitForSeconds(0.2f);
-            }
-
-            Debug.Log($"[LvlUp CrashReporter] Batch complete: {successCount} sent, {failedCount} failed");
-            _isSending = false;
+                else
+                {
+                    Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
+                    // Remove from failed reports if it was there
+                    _failedReports.Remove(report);
+                }
+            }));
         }
 
         /// <summary>
