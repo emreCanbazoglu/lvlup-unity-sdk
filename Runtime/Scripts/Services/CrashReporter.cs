@@ -21,6 +21,10 @@ namespace LvlUp.Services
         private bool _autoCapture = true;
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 50;
+        
+        // Batch sending configuration
+        private float _lastBatchSendTime;
+        private const float BATCH_SEND_INTERVAL = 30f; // Send batches every 30 seconds
 
         public CrashReporter(LvlUpHttpClient httpClient, string gameId, string userId = null, string sessionId = null)
         {
@@ -28,6 +32,7 @@ namespace LvlUp.Services
             _gameId = gameId;
             _userId = userId;
             _sessionId = sessionId;
+            _lastBatchSendTime = Time.realtimeSinceStartup;
         }
 
         /// <summary>
@@ -44,6 +49,22 @@ namespace LvlUp.Services
             else if (!enabled)
             {
                 UnregisterExceptionHandlers();
+            }
+        }
+        
+        /// <summary>
+        /// Update method - should be called regularly (e.g., from MonoBehaviour Update)
+        /// Handles periodic batch sending of crash reports
+        /// </summary>
+        public void Update()
+        {
+            if (!_isEnabled) return;
+            
+            // Check if it's time to send batched crash reports
+            if (Time.realtimeSinceStartup - _lastBatchSendTime >= BATCH_SEND_INTERVAL)
+            {
+                SendCrashReports();
+                _lastBatchSendTime = Time.realtimeSinceStartup;
             }
         }
 
