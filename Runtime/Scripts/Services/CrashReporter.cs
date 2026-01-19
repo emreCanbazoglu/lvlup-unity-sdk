@@ -13,7 +13,8 @@ namespace LvlUp.Services
     public class CrashReporter
     {
         private readonly LvlUpHttpClient _httpClient;
-        private readonly string _gameId;
+        private readonly MonoBehaviour _coroutineRunner;
+        private readonly string _apiKey;
         private readonly string _userId;
         private readonly string _sessionId;
         private readonly Queue<CrashReport> _crashQueue = new Queue<CrashReport>();
@@ -26,10 +27,11 @@ namespace LvlUp.Services
         private float _lastBatchSendTime;
         private const float BATCH_SEND_INTERVAL = 30f; // Send batches every 30 seconds
 
-        public CrashReporter(LvlUpHttpClient httpClient, string gameId, string userId = null, string sessionId = null)
+        public CrashReporter(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner, string apiKey, string userId = null, string sessionId = null)
         {
             _httpClient = httpClient;
-            _gameId = gameId;
+            _coroutineRunner = coroutineRunner;
+            _apiKey = apiKey;
             _userId = userId;
             _sessionId = sessionId;
             _lastBatchSendTime = Time.realtimeSinceStartup;
@@ -196,7 +198,7 @@ namespace LvlUp.Services
             {
                 var report = new CrashReport
                 {
-                    GameId = _gameId,
+                    GameId = _apiKey,
                     UserId = _userId,
                     SessionId = _sessionId,
                     CrashType = crashType,
@@ -272,12 +274,14 @@ namespace LvlUp.Services
                 try
                 {
                     string json = JsonUtility.ToJson(report);
-                    string endpoint = $"/games/{_gameId}/crashes";
+                    // API key is used as the game identifier in the endpoint
+                    string endpoint = $"/games/{_apiKey}/crashes";
                     
                     Debug.Log($"[LvlUp CrashReporter] POST {endpoint}");
                     Debug.Log($"[LvlUp CrashReporter] Payload: {json}");
                     
-                    _httpClient.Post<object>(endpoint, json, (response) =>
+                    // Start the coroutine using the MonoBehaviour
+                    _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, json, (response) =>
                     {
                         if (!response.success)
                         {
@@ -289,7 +293,7 @@ namespace LvlUp.Services
                         {
                             Debug.Log("[LvlUp CrashReporter] Crash report sent successfully");
                         }
-                    });
+                    }));
                 }
                 catch (Exception ex)
                 {
@@ -390,7 +394,7 @@ namespace LvlUp.Services
     public class CrashReport : EventMetadata
     {
         // Crash-specific fields
-        public string GameId;
+        public string GameId; // Note: This contains the API key, used as game identifier
         public string UserId;
         public string SessionId;
         public string CrashType;

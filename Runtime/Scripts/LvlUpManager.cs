@@ -103,7 +103,7 @@ namespace LvlUp
 
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
             _geoService = new GeoLocationService();
-            _crashReporter = new CrashReporter(_httpClient, _apiKey, null, null);
+            _crashReporter = new CrashReporter(_httpClient, this, _apiKey, null, null);
             
             // Enable crash reporting by default
             if (_config.enableCrashReporting)
