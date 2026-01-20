@@ -139,6 +139,7 @@ namespace LvlUp
             {
                 // Generate or retrieve user ID
                 string autoUserId = GetOrCreateAutoUserId();
+                
                 StartSession(autoUserId, null, response =>
                 {
                     if (_config.enableDebugLogs)
@@ -281,6 +282,8 @@ namespace LvlUp
             _currentUserId = userId;
             _currentUserMetadata = metadata ?? new UserMetadata();
             
+            _crashReporter?.SetUserId(_currentUserId);
+            
             // Increment session number
             _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
             PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
@@ -313,6 +316,8 @@ namespace LvlUp
                 {
                     _currentSession = response.data;
                     _hasOfflineSession = false;
+                    
+                    _crashReporter.SetSessionId(_currentSession.sessionId);
                     
                     // Start heartbeat coroutine
                     StartHeartbeat();

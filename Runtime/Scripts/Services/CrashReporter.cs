@@ -16,9 +16,11 @@ namespace LvlUp.Services
         private readonly LvlUpHttpClient _httpClient;
         private readonly MonoBehaviour _coroutineRunner;
         private readonly string _apiKey;
-        private readonly string _userId;
-        private readonly string _sessionId;
+
         private readonly Dictionary<CrashReport, int> _failedReports = new Dictionary<CrashReport, int>();
+        
+        private string _userId;
+        private string _sessionId;
         private bool _isEnabled = true;
         private bool _autoCapture = true;
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
@@ -71,6 +73,20 @@ namespace LvlUp.Services
                     UnregisterExceptionHandlers();
                 }
             }
+        }
+
+        
+        /// <summary>
+        /// Set the user ID for crash reports
+        /// </summary>
+        public void SetUserId(string userId)
+        {
+            _userId = userId;
+        }
+
+        public void SetSessionId(string sessionId)
+        {
+            _sessionId = sessionId;
         }
 
         /// <summary>
