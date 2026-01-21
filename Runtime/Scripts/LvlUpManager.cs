@@ -126,9 +126,7 @@ namespace LvlUp
             
             // Optionally fetch geo data at initialization (async, non-blocking)
             if (_config.enableGeoTracking)
-            {
                 StartCoroutine(FetchGeoLocationAsync());
-            }
 
             // Start automatic flush coroutine
             if (!_config.sendImmediately)
@@ -140,22 +138,33 @@ namespace LvlUp
                 // Generate or retrieve user ID
                 string autoUserId = GetOrCreateAutoUserId();
                 
-                StartSession(autoUserId, null, response =>
+                // If geo tracking is enabled, wait briefly for geo data before starting session
+                // This ensures countryCode is available from the start rather than being NULL
+                // and getting updated later by heartbeat
+                if (_config.enableGeoTracking && _cachedGeoData == null)
                 {
-                    if (_config.enableDebugLogs)
+                    StartCoroutine(WaitForGeoThenStartSession(autoUserId, onComplete));
+                }
+                else
+                {
+                    // Geo disabled or already cached - start immediately
+                    StartSession(autoUserId, null, response =>
                     {
+                        if (_config.enableDebugLogs)
+                        {
+                            if (response.success)
+                                Debug.Log($"[LvlUp] Auto-started session for user: {autoUserId}");
+                            else
+                                Debug.LogWarning($"[LvlUp] Failed to auto-start session: {response.error}");
+                        }
+                        
+                        // Invoke initialization complete callback
                         if (response.success)
-                            Debug.Log($"[LvlUp] Auto-started session for user: {autoUserId}");
+                            onComplete?.Invoke(true, $"Initialized and session started for user: {autoUserId}");
                         else
-                            Debug.LogWarning($"[LvlUp] Failed to auto-start session: {response.error}");
-                    }
-                    
-                    // Invoke initialization complete callback
-                    if (response.success)
-                        onComplete?.Invoke(true, $"Initialized and session started for user: {autoUserId}");
-                    else
-                        onComplete?.Invoke(false, $"Initialized but session failed: {response.error}");
-                });
+                            onComplete?.Invoke(false, $"Initialized but session failed: {response.error}");
+                    });
+                }
             }
             else
             {
@@ -266,6 +275,54 @@ namespace LvlUp
 
 
         #region Utility Methods
+
+        /// <summary>
+        /// Wait for geo data to be fetched (with timeout) then start session
+        /// This ensures sessions have countryCode from the start when geo tracking is enabled
+        /// </summary>
+        private IEnumerator WaitForGeoThenStartSession(string userId, Action<bool, string> onComplete)
+        {
+            const float GEO_WAIT_TIMEOUT = 3f; // Wait up to 3 seconds for geo data
+            float waitStartTime = Time.time;
+            
+            if (_config.enableDebugLogs)
+                Debug.Log("[LvlUp] Waiting for geo data before starting session...");
+            
+            // Wait for geo data or timeout
+            while (_cachedGeoData == null && (Time.time - waitStartTime) < GEO_WAIT_TIMEOUT)
+            {
+                yield return new WaitForSeconds(0.1f);
+            }
+            
+            if (_cachedGeoData != null)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Geo data received ({_cachedGeoData.countryCode}), starting session with countryCode");
+            }
+            else
+            {
+                if (_config.enableDebugLogs)
+                    Debug.LogWarning("[LvlUp] Geo data timeout, starting session without countryCode (will be updated by heartbeat if geo arrives later)");
+            }
+            
+            // Start session with or without geo data
+            StartSession(userId, null, response =>
+            {
+                if (_config.enableDebugLogs)
+                {
+                    if (response.success)
+                        Debug.Log($"[LvlUp] Auto-started session for user: {userId}");
+                    else
+                        Debug.LogWarning($"[LvlUp] Failed to auto-start session: {response.error}");
+                }
+                
+                // Invoke initialization complete callback
+                if (response.success)
+                    onComplete?.Invoke(true, $"Initialized and session started for user: {userId}");
+                else
+                    onComplete?.Invoke(false, $"Initialized but session failed: {response.error}");
+            });
+        }
 
         /// <summary>
         /// Start a new session for a user
@@ -487,7 +544,7 @@ namespace LvlUp
         }
 
         /// <summary>
-        /// Send a single heartbeat to keep the session alive
+        /// Send a single heartbeat to keep the session alive and update geo-location if available
         /// </summary>
         private void SendHeartbeat()
         {
@@ -496,10 +553,16 @@ namespace LvlUp
 
             string endpoint = $"analytics/sessions/{_currentSession.sessionId}/heartbeat";
             
-            // Send empty object instead of null to avoid JSON parsing errors
-            var emptyRequest = new { };
+            // Include countryCode if available from geo-location tracking
+            // This updates sessions that started before geo data was resolved
+            var heartbeatData = new
+            {
+                countryCode = (_config.enableGeoTracking && _cachedGeoData != null) 
+                    ? _cachedGeoData.countryCode 
+                    : (string)null
+            };
             
-            StartCoroutine(_httpClient.Post<object>(endpoint, emptyRequest, response =>
+            StartCoroutine(_httpClient.Post<object>(endpoint, heartbeatData, response =>
             {
                 if (response.success)
                 {
