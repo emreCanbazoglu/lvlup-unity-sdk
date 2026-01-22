@@ -33,6 +33,7 @@ namespace LvlUp
         private LvlUpHttpClient _httpClient;
         private GeoLocationService _geoService;
         private CrashReporter _crashReporter;
+        private RemoteConfigService _remoteConfigService;
         private string _apiKey;
         private string _baseUrl;
 
@@ -104,6 +105,7 @@ namespace LvlUp
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
             _geoService = new GeoLocationService();
             _crashReporter = new CrashReporter(_httpClient, this, _apiKey, null, null);
+            _remoteConfigService = new RemoteConfigService();
             
             // Enable crash reporting by default
             if (_config.enableCrashReporting)
@@ -273,6 +275,50 @@ namespace LvlUp
 
         #endregion
 
+        #region Remote Config Service
+
+        /// <summary>
+        /// Initialize Remote Config Service
+        /// </summary>
+        /// <param name="gameId">Your game ID</param>
+        /// <param name="environment">Environment (development/staging/production)</param>
+        public static void InitializeRemoteConfig(string gameId, string environment = "production")
+        {
+            Instance._remoteConfigService.Initialize(gameId, Instance._baseUrl, environment, Instance._config.enableDebugLogs);
+        }
+
+        /// <summary>
+        /// Access Remote Config Service for config operations
+        /// </summary>
+        public static RemoteConfigService RemoteConfig => Instance._remoteConfigService;
+
+        /// <summary>
+        /// Fetch remote configs asynchronously
+        /// </summary>
+        public static void FetchRemoteConfigs(Action<bool> onComplete = null)
+        {
+            if (Instance._remoteConfigService == null || !Instance._remoteConfigService.IsInitialized)
+            {
+                Debug.LogError("[LvlUp] Remote Config Service not initialized. Call InitializeRemoteConfig first.");
+                onComplete?.Invoke(false);
+                return;
+            }
+
+            Instance._remoteConfigService.FetchAsync(Instance, onComplete);
+        }
+
+        /// <summary>
+        /// Set context for Remote Config rule evaluation
+        /// </summary>
+        public static void SetRemoteConfigContext(string platform = null, string version = null, string country = null, string segment = null)
+        {
+            if (Instance._remoteConfigService != null && Instance._remoteConfigService.IsInitialized)
+            {
+                Instance._remoteConfigService.SetContext(platform, version, country, segment);
+            }
+        }
+
+        #endregion
 
         #region Utility Methods
 
