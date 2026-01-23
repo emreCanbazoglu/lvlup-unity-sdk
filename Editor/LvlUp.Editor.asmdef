@@ -1,0 +1,19 @@
+{
+    "name": "LvlUp.Editor",
+    "rootNamespace": "LvlUp.Editor",
+    "references": [
+        "LvlUp.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
+

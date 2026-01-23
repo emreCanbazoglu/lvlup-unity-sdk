@@ -78,6 +78,36 @@ namespace LvlUp
         #region Initialization
 
         /// <summary>
+        /// Initialize the LvlUp SDK by automatically loading config from Resources
+        /// Loads LvlUpConfig.asset from Assets/lvlup-unity-sdk/Resources/
+        /// </summary>
+        /// <param name="onComplete">Callback when initialization completes</param>
+        public static void Initialize(Action<bool, string> onComplete = null)
+        {
+            LvlUpConfigScriptable configScriptable = Resources.Load<LvlUpConfigScriptable>("LvlUpConfig");
+            
+            if (configScriptable == null)
+            {
+                string error = "[LvlUp] LvlUpConfig scriptable asset not found in Resources/. " +
+                    "Please create one using: Assets > LvlUp > Create Configuration";
+                Debug.LogError(error);
+                onComplete?.Invoke(false, error);
+                return;
+            }
+
+            if (!configScriptable.IsValid())
+            {
+                string error = "[LvlUp] LvlUpConfigScriptable is not valid. API Key and Base URL must be configured.";
+                Debug.LogError(error);
+                onComplete?.Invoke(false, error);
+                return;
+            }
+
+            LvlUpConfig config = configScriptable.ToLvlUpConfig();
+            Instance._Initialize(configScriptable.GetApiKey(), configScriptable.GetBaseUrl(), config, onComplete);
+        }
+
+        /// <summary>
         /// Initialize the LvlUp SDK
         /// </summary>
         /// <param name="apiKey">Your LvlUp API key</param>
@@ -185,6 +215,15 @@ namespace LvlUp
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            // Clean up singleton reference when destroyed
+            if (_instance == this)
+            {
+                _instance = null;
+            }
         }
 
         private void OnApplicationPause(bool pauseStatus)
@@ -314,6 +353,26 @@ namespace LvlUp
         }
 
         /// <summary>
+        /// Get current Remote Config environment
+        /// </summary>
+        public static string GetRemoteConfigEnvironment()
+        {
+            return _instance?._config?.remoteConfigEnvironment ?? "production";
+        }
+
+        /// <summary>
+        /// Get the actual environment that will be used (always production in builds)
+        /// </summary>
+        public static string GetEffectiveRemoteConfigEnvironment()
+        {
+            #if UNITY_EDITOR
+            return _instance?._config?.remoteConfigEnvironment ?? "production";
+            #else
+            return "production"; // Always production in builds
+            #endif
+        }
+
+        /// <summary>
         /// Auto-set RemoteConfig context from current session data
         /// Called automatically when initializing remote config
         /// </summary>
@@ -343,6 +402,11 @@ namespace LvlUp
 
             try
             {
+                // Force production environment in builds
+                #if !UNITY_EDITOR
+                _config.remoteConfigEnvironment = "production";
+                #endif
+
                 // Initialize RemoteConfig service
                 _remoteConfigService.Initialize(
                     _httpClient,
@@ -357,7 +421,7 @@ namespace LvlUp
                 FetchRemoteConfigs();
 
                 if (_config.enableDebugLogs)
-                    Debug.Log("[LvlUp] RemoteConfig initialized and fetching configs...");
+                    Debug.Log($"[LvlUp] RemoteConfig initialized (environment: {_config.remoteConfigEnvironment}) and fetching configs...");
             }
             catch (Exception e)
             {

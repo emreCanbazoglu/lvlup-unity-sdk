@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using LvlUp.Utils;
@@ -209,8 +210,8 @@ namespace LvlUp.RemoteConfig
     [Serializable]
     public class ConfigsData
     {
-        public object configs;  // Dictionary of key-value pairs - can be any config values
-        public object metadata; // Metadata about the configs fetch
+        public Dictionary<string, object> configs;  // Dictionary of key-value pairs - can be any config values
+        public ConfigMetadata metadata; // Metadata about the configs fetch
     }
 
     /// <summary>
