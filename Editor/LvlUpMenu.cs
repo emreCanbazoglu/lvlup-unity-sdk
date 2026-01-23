@@ -60,12 +60,6 @@ namespace LvlUp.Editor
             Selection.activeObject = config;
             EditorGUIUtility.PingObject(config);
         }
-
-        [MenuItem("Window/LvlUp/Debug Window")]
-        public static void OpenDebugWindow()
-        {
-            LvlUpDebugWindow.ShowWindow();
-        }
     }
 }
 
