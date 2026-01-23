@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.Linq;
 using LvlUp.RemoteConfig;
+using Newtonsoft.Json;
 
 namespace LvlUp.Editor
 {
@@ -540,11 +541,34 @@ namespace LvlUp.Editor
                     if (double.TryParse(value, out double doubleVal))
                         return doubleVal.ToString("F2");
                     break;
+                case "object":
+                    // Try to parse and pretty-print JSON objects/arrays
+                    try
+                    {
+                        if (value.StartsWith("{") || value.StartsWith("["))
+                        {
+                            // Parse and format JSON with indentation
+                            var parsed = JsonConvert.DeserializeObject(value);
+                            if (parsed != null)
+                            {
+                                string formatted = JsonConvert.SerializeObject(parsed, Formatting.Indented);
+                                // Limit to reasonable length
+                                if (formatted.Length > 500)
+                                    formatted = formatted.Substring(0, 497) + "...";
+                                return formatted;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // If JSON parsing fails, fall through to default handling
+                    }
+                    break;
             }
 
             // Truncate very long strings
-            if (value.Length > 100)
-                return value.Substring(0, 97) + "...";
+            if (value.Length > 200)
+                return value.Substring(0, 197) + "...";
 
             return value;
         }
