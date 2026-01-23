@@ -1,7 +1,9 @@
 {
     "name": "LvlUp.Runtime",
     "rootNamespace": "LvlUp",
-    "references": [],
+    "references": [
+        "Unity.Nuget.Newtonsoft-Json"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

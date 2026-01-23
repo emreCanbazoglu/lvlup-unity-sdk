@@ -2,7 +2,8 @@
     "name": "LvlUp.Editor",
     "rootNamespace": "LvlUp.Editor",
     "references": [
-        "LvlUp.Runtime"
+        "LvlUp.Runtime",
+        "Unity.Nuget.Newtonsoft-Json"
     ],
     "includePlatforms": [
         "Editor"

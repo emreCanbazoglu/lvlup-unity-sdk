@@ -3,6 +3,7 @@ using UnityEditor;
 using System.Linq;
 using LvlUp.RemoteConfig;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace LvlUp.Editor
 {
@@ -542,19 +543,18 @@ namespace LvlUp.Editor
                         return doubleVal.ToString("F2");
                     break;
                 case "object":
-                    // Try to parse and pretty-print JSON objects/arrays
+                    // Try to parse and display as hierarchical key-value format
                     try
                     {
                         if (value.StartsWith("{") || value.StartsWith("["))
                         {
-                            // Parse and format JSON with indentation
                             var parsed = JsonConvert.DeserializeObject(value);
                             if (parsed != null)
                             {
-                                string formatted = JsonConvert.SerializeObject(parsed, Formatting.Indented);
+                                string formatted = FormatObjectHierarchy(parsed, 0);
                                 // Limit to reasonable length
-                                if (formatted.Length > 500)
-                                    formatted = formatted.Substring(0, 497) + "...";
+                                if (formatted.Length > 800)
+                                    formatted = formatted.Substring(0, 797) + "...";
                                 return formatted;
                             }
                         }
@@ -571,6 +571,99 @@ namespace LvlUp.Editor
                 return value.Substring(0, 197) + "...";
 
             return value;
+        }
+
+        private string FormatObjectHierarchy(object obj, int indentLevel)
+        {
+            if (obj == null)
+                return "null";
+
+            var indent = new string(' ', indentLevel * 4);
+            var result = new System.Text.StringBuilder();
+
+            // Handle JObject (JSON objects)
+            if (obj is Newtonsoft.Json.Linq.JObject jObj)
+            {
+                foreach (var prop in jObj.Properties())
+                {
+                    string key = CapitalizeFirstLetter(prop.Name);
+                    var propValue = prop.Value;
+
+                    if (propValue is Newtonsoft.Json.Linq.JObject || propValue is Newtonsoft.Json.Linq.JArray)
+                    {
+                        // Nested object or array
+                        result.AppendLine($"{indent}{key}:");
+                        result.Append(FormatObjectHierarchy(propValue, indentLevel + 1));
+                    }
+                    else
+                    {
+                        // Simple value
+                        result.AppendLine($"{indent}{key}: {FormatSimpleValue(propValue)}");
+                    }
+                }
+            }
+            // Handle JArray (JSON arrays)
+            else if (obj is Newtonsoft.Json.Linq.JArray jArr)
+            {
+                for (int i = 0; i < jArr.Count; i++)
+                {
+                    var item = jArr[i];
+                    if (item is Newtonsoft.Json.Linq.JObject || item is Newtonsoft.Json.Linq.JArray)
+                    {
+                        result.AppendLine($"{indent}[{i}]:");
+                        result.Append(FormatObjectHierarchy(item, indentLevel + 1));
+                    }
+                    else
+                    {
+                        result.AppendLine($"{indent}- {FormatSimpleValue(item)}");
+                    }
+                }
+            }
+
+            return result.ToString();
+        }
+
+        private string FormatSimpleValue(object value)
+        {
+            if (value == null)
+                return "null";
+
+            // Handle JValue
+            if (value is Newtonsoft.Json.Linq.JValue jVal)
+            {
+                value = jVal.Value;
+            }
+
+            if (value is bool b)
+                return b ? "true" : "false";
+            if (value is string s)
+                return $"\"{s}\"";
+            if (value is int || value is long || value is double || value is float)
+                return value.ToString();
+
+            return value.ToString();
+        }
+
+        private string CapitalizeFirstLetter(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+            
+            // Split camelCase or snake_case
+            text = System.Text.RegularExpressions.Regex.Replace(text, "([a-z])([A-Z])", "$1 $2");
+            text = text.Replace("_", " ");
+            
+            // Capitalize first letter of each word
+            var words = text.Split(' ');
+            for (int i = 0; i < words.Length; i++)
+            {
+                if (words[i].Length > 0)
+                {
+                    words[i] = char.ToUpper(words[i][0]) + words[i].Substring(1);
+                }
+            }
+            
+            return string.Join(" ", words);
         }
 
         private Texture2D CreateColorTexture(Color color)
