@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using LvlUp.Utils;
@@ -42,25 +41,17 @@ namespace LvlUp.RemoteConfig
         /// <summary>
         /// Save configs to cache file with timestamp
         /// </summary>
-        public void SaveConfigs(List<ConfigData> configs, string environment)
+        public void SaveConfigs(ConfigsData configsData, string environment)
         {
             try
             {
-                // Serialize configs to JSON
-                ConfigsData configsData = new ConfigsData
-                {
-                    configs = configs,
-                    fetchedAt = DateTime.UtcNow.ToUnixTimestamp(),
-                    environment = environment
-                };
-
                 string json = SimpleJson.ToJson(configsData);
                 string cacheFilePath = GetCacheFilePath(environment);
 
                 // Write to file
                 File.WriteAllText(cacheFilePath, json);
 
-                Debug.Log($"[LvlUp] Cached {configs.Count} configs for environment '{environment}' at {cacheFilePath}");
+                Debug.Log($"[LvlUp] Cached configs for environment '{environment}' at {cacheFilePath}");
             }
             catch (Exception e)
             {
@@ -71,9 +62,9 @@ namespace LvlUp.RemoteConfig
         /// <summary>
         /// Load configs from cache file if valid
         /// </summary>
-        public bool TryLoadConfigs(string environment, out List<ConfigData> configs)
+        public bool TryLoadConfigs(string environment, out ConfigsData configsData)
         {
-            configs = new List<ConfigData>();
+            configsData = null;
 
             try
             {
@@ -95,12 +86,11 @@ namespace LvlUp.RemoteConfig
 
                 // Load and deserialize
                 string json = File.ReadAllText(cacheFilePath);
-                ConfigsData configsData = SimpleJson.FromJson<ConfigsData>(json);
+                configsData = SimpleJson.FromJson<ConfigsData>(json);
 
                 if (configsData?.configs != null)
                 {
-                    configs = configsData.configs;
-                    Debug.Log($"[LvlUp] Loaded {configs.Count} cached configs from {cacheFilePath}");
+                    Debug.Log($"[LvlUp] Loaded cached configs from {cacheFilePath}");
                     return true;
                 }
             }
@@ -211,17 +201,29 @@ namespace LvlUp.RemoteConfig
         {
             return $"{_gameId}_*{CACHE_FILE_EXTENSION}";
         }
+    }
 
-        /// <summary>
-        /// Internal class for cache serialization
-        /// </summary>
-        [Serializable]
-        private class ConfigsData
-        {
-            public List<ConfigData> configs;
-            public long fetchedAt;
-            public string environment;
-        }
+    /// <summary>
+    /// Game configuration data structure - generic key-value based
+    /// </summary>
+    [Serializable]
+    public class ConfigsData
+    {
+        public object configs;  // Dictionary of key-value pairs - can be any config values
+        public object metadata; // Metadata about the configs fetch
+    }
+
+    /// <summary>
+    /// Config metadata
+    /// </summary>
+    [Serializable]
+    public class ConfigMetadata
+    {
+        public string gameId;
+        public string environment;
+        public string fetchedAt;
+        public string cacheUntil;
+        public int totalConfigs;
     }
 
     /// <summary>

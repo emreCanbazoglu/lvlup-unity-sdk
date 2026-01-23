@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using LvlUp.RemoteConfig;
+using LvlUp.Models;
 using LvlUp.Utils;
 
 namespace LvlUp.Services
@@ -13,13 +14,12 @@ namespace LvlUp.Services
     /// </summary>
     public class RemoteConfigService
     {
-        // Services
-        private RemoteConfigHttpClient _httpClient;
+        // HTTP client (shared from LvlUpManager - has API key)
+        private LvlUpHttpClient _httpClient;
         private RemoteConfigCacheService _cacheService;
 
         // State
         private Dictionary<string, ConfigData> _configs = new Dictionary<string, ConfigData>();
-        private string _gameId;
         private string _currentEnvironment = "production";
         private bool _isInitialized = false;
         private bool _isFetching = false;
@@ -36,9 +36,9 @@ namespace LvlUp.Services
 
         /// <summary>
         /// Initialize Remote Config Service
-        /// Called by LvlUpManager during SDK initialization
+        /// Uses API key from LvlUpHttpClient - backend identifies game from API key
         /// </summary>
-        public void Initialize(string gameId, string baseUrl, string environment = "production", bool debugLogs = false)
+        public void Initialize(LvlUpHttpClient httpClient, string environment = "production", bool debugLogs = false)
         {
             if (_isInitialized)
             {
@@ -46,23 +46,30 @@ namespace LvlUp.Services
                 return;
             }
 
+            _httpClient = httpClient;
+            _currentEnvironment = environment;
+
             try
             {
-                _gameId = gameId;
-                _currentEnvironment = environment;
-
-                // Initialize services
-                _httpClient = new RemoteConfigHttpClient(baseUrl, _gameId, timeout: 30f, debugLogs: debugLogs);
-                _cacheService = new RemoteConfigCacheService(_gameId);
+                // Initialize cache service - uses a generic cache key since backend handles game identification
+                _cacheService = new RemoteConfigCacheService("default");
 
                 _isInitialized = true;
-                Debug.Log($"[LvlUp] RemoteConfigService initialized for game: {_gameId}");
+
+                if (debugLogs)
+                    Debug.Log($"[LvlUp] RemoteConfigService initialized with environment: {environment}");
             }
             catch (Exception e)
             {
-                Debug.LogError($"[LvlUp] Failed to initialize RemoteConfigService: {e.Message}");
+                Debug.LogError($"[LvlUp] Failed to initialize RemoteConfig services: {e.Message}");
             }
         }
+
+        // Context for rule evaluation
+        private string _contextPlatform;
+        private string _contextVersion;
+        private string _contextCountry;
+        private string _contextSegment;
 
         #endregion
 
@@ -70,6 +77,7 @@ namespace LvlUp.Services
 
         /// <summary>
         /// Set context for server-side rule evaluation
+        /// Context is sent with fetch requests for rule evaluation
         /// </summary>
         public void SetContext(string platform = null, string version = null, string country = null, string segment = null)
         {
@@ -79,7 +87,10 @@ namespace LvlUp.Services
                 return;
             }
 
-            _httpService.SetContext(platform, version, country, segment);
+            _contextPlatform = platform;
+            _contextVersion = version;
+            _contextCountry = country;
+            _contextSegment = segment;
         }
 
         /// <summary>
@@ -133,17 +144,31 @@ namespace LvlUp.Services
                 bool success = false;
                 bool fetchComplete = false;
 
-                yield return _httpClient.FetchConfigs(
-                    _currentEnvironment,
-                    onSuccess: (response) =>
+                // Build endpoint with query parameters for context
+                string endpoint = $"config/configs?environment={_currentEnvironment}";
+                if (!string.IsNullOrEmpty(_contextPlatform))
+                    endpoint += $"&platform={_contextPlatform}";
+                if (!string.IsNullOrEmpty(_contextVersion))
+                    endpoint += $"&version={_contextVersion}";
+                if (!string.IsNullOrEmpty(_contextCountry))
+                    endpoint += $"&country={_contextCountry}";
+                if (!string.IsNullOrEmpty(_contextSegment))
+                    endpoint += $"&segment={_contextSegment}";
+
+                // Use GET request - backend identifies game from API key in header
+                // Note: LvlUpHttpClient.Get<T> already wraps response in ApiResponse<T>
+                yield return _httpClient.Get<ConfigsData>(endpoint, 
+                    callback: (response) =>
                     {
-                        success = true;
-                        ProcessConfigsResponse(response);
-                        fetchComplete = true;
-                    },
-                    onError: (error) =>
-                    {
-                        Debug.LogWarning($"[LvlUp] Fetch failed (attempt {retryCount + 1}): {error}");
+                        success = response.success;
+                        if (response.success && response.data != null)
+                        {
+                            ProcessConfigsResponse(response.data);
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[LvlUp] Fetch failed (attempt {retryCount + 1}): {response.error}");
+                        }
                         fetchComplete = true;
                     }
                 );
@@ -171,9 +196,9 @@ namespace LvlUp.Services
 
             // All retries failed, try to load from cache
             Debug.Log("[LvlUp] All fetch attempts failed, trying cache...");
-            if (_cacheService.TryLoadConfigs(_currentEnvironment, out var cachedConfigs))
+            if (_cacheService.TryLoadConfigs(_currentEnvironment, out var cachedConfigsData))
             {
-                ProcessConfigs(cachedConfigs, isFromCache: true);
+                ProcessConfigsResponse(cachedConfigsData);
                 _isFetching = false;
                 onComplete?.Invoke(true);
             }
@@ -185,19 +210,76 @@ namespace LvlUp.Services
             }
         }
 
-        private void ProcessConfigsResponse(ConfigsResponse response)
+        private void ProcessConfigsResponse(ConfigsData configsData)
         {
-            if (response?.configs == null)
+            if (configsData?.configs == null)
             {
                 Debug.LogWarning("[LvlUp] Invalid configs response");
                 return;
             }
 
-            List<ConfigData> configList = new List<ConfigData>(response.configs);
-            ProcessConfigs(configList, isFromCache: false);
+            // Convert the configs object (dictionary) to a list of ConfigData
+            List<ConfigData> configList = ConvertConfigsToConfigDataList(configsData.configs);
+
+            ProcessConfigs(configList, configsData, isFromCache: false);
         }
 
-        private void ProcessConfigs(List<ConfigData> configs, bool isFromCache)
+        private List<ConfigData> ConvertConfigsToConfigDataList(object configsObject)
+        {
+            var configList = new List<ConfigData>();
+
+            if (configsObject == null)
+                return configList;
+
+            // Handle Dictionary<string, object> format from backend
+            if (configsObject is Dictionary<string, object> configDict)
+            {
+                foreach (var kvp in configDict)
+                {
+                    configList.Add(new ConfigData
+                    {
+                        key = kvp.Key,
+                        value = SimpleJson.ToJson(kvp.Value),
+                        dataType = kvp.Value?.GetType().Name ?? "object",
+                        isEnabled = true,
+                        environment = _currentEnvironment,
+                        createdAt = DateTime.UtcNow.ToUnixTimestamp(),
+                        updatedAt = DateTime.UtcNow.ToUnixTimestamp(),
+                    });
+                }
+            }
+            else
+            {
+                // Fallback: try to reflect over object's fields
+                try
+                {
+                    var fields = configsObject.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    
+                    foreach (var field in fields)
+                    {
+                        var value = field.GetValue(configsObject);
+                        configList.Add(new ConfigData
+                        {
+                            key = field.Name,
+                            value = SimpleJson.ToJson(value),
+                            dataType = value?.GetType().Name ?? "object",
+                            isEnabled = true,
+                            environment = _currentEnvironment,
+                            createdAt = DateTime.UtcNow.ToUnixTimestamp(),
+                            updatedAt = DateTime.UtcNow.ToUnixTimestamp(),
+                        });
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[LvlUp] Could not convert configs object: {e.Message}");
+                }
+            }
+
+            return configList;
+        }
+
+        private void ProcessConfigs(List<ConfigData> configs, ConfigsData configsData, bool isFromCache)
         {
             // Clear and rebuild dictionary
             _configs.Clear();
@@ -210,9 +292,9 @@ namespace LvlUp.Services
             }
 
             // Save to cache if from server
-            if (!isFromCache)
+            if (!isFromCache && configsData != null)
             {
-                _cacheService.SaveConfigs(configs, _currentEnvironment);
+                _cacheService.SaveConfigs(configsData, _currentEnvironment);
             }
 
             // Fire event
@@ -366,7 +448,7 @@ namespace LvlUp.Services
                 if (string.IsNullOrEmpty(config.value))
                     return defaultValue;
 
-                return SimpleJson.FromJson<T>(config.value);
+                return JsonUtility.FromJson<T>(config.value);
             }
             catch (Exception e)
             {

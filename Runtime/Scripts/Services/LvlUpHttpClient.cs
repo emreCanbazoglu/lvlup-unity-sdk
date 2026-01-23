@@ -56,7 +56,8 @@ namespace LvlUp.Services
         public IEnumerator Post<T>(string endpoint, object body, Action<ApiResponse<T>> callback)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            string jsonBody = SimpleJson.ToJson(body);
+            // Use empty object {} if body is null, instead of "null" string
+            string jsonBody = body == null ? "{}" : SimpleJson.ToJson(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] POST {url}\nBody: {jsonBody}");
@@ -83,7 +84,8 @@ namespace LvlUp.Services
         public IEnumerator Put<T>(string endpoint, object body, Action<ApiResponse<T>> callback)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            string jsonBody = SimpleJson.ToJson(body);
+            // Use empty object {} if body is null, instead of "null" string
+            string jsonBody = body == null ? "{}" : SimpleJson.ToJson(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] PUT {url}\nBody: {jsonBody}");
@@ -142,14 +144,14 @@ namespace LvlUp.Services
                     if (_debugLogs)
                         Debug.Log($"[LvlUp] Response: {responseText}");
 
-                    var response = JsonUtility.FromJson<ApiResponse<T>>(responseText);
+                    var response = SimpleJson.FromJson<ApiResponse<T>>(responseText);
                     
                     if (response == null)
                     {
                         response = new ApiResponse<T>
                         {
                             success = true,
-                            data = JsonUtility.FromJson<T>(responseText)
+                            data = SimpleJson.FromJson<T>(responseText)
                         };
                     }
 
@@ -197,7 +199,7 @@ namespace LvlUp.Services
                     if (_debugLogs)
                         Debug.Log($"[LvlUp] Response: {responseText}");
 
-                    var response = JsonUtility.FromJson<ApiResponse>(responseText);
+                    var response = SimpleJson.FromJson<ApiResponse>(responseText);
                     return response ?? new ApiResponse { success = true };
                 }
                 catch (Exception ex)

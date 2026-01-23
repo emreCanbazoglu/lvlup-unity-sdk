@@ -19,6 +19,7 @@ namespace LvlUp.RemoteConfig
         public long updatedAt;
     }
 
+
     /// <summary>
     /// Response wrapper for configs fetch
     /// </summary>
@@ -61,6 +62,29 @@ namespace LvlUp.RemoteConfig
         public List<ConfigData> configs;
         public bool isFromCache;
         public long fetchedAt;
+    }
+
+    /// <summary>
+    /// Helper for JSON serialization
+    /// </summary>
+    public static class SimpleJsonHelper
+    {
+        public static string ToJsonString(object obj)
+        {
+            if (obj == null)
+                return "null";
+            
+            // Use Unity's JsonUtility if possible
+            try
+            {
+                return JsonUtility.ToJson(obj);
+            }
+            catch
+            {
+                // Fallback to ToString for simple types
+                return obj.ToString();
+            }
+        }
     }
 }
 

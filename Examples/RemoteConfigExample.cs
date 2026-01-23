@@ -30,11 +30,6 @@ namespace LvlUp.Examples
 
         private void InitializeRemoteConfig()
         {
-            // Initialize Remote Config service through LvlUpManager
-            LvlUpManager.InitializeRemoteConfig(
-                gameId: "your_game_id",
-                environment: "production"
-            );
 
             // Set context for server-side rule evaluation
             LvlUpManager.SetRemoteConfigContext(
@@ -53,18 +48,7 @@ namespace LvlUp.Examples
 
         private void FetchConfigs()
         {
-            LvlUpManager.FetchRemoteConfigs(success =>
-            {
-                if (success)
-                {
-                    Debug.Log("Configs fetched successfully");
-                    UseConfigs();
-                }
-                else
-                {
-                    Debug.LogError("Failed to fetch configs");
-                }
-            });
+
         }
 
         private void UseConfigs()

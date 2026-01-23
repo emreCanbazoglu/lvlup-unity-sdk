@@ -201,7 +201,7 @@ namespace LvlUp.Services
             {
                 var report = new CrashReport
                 {
-                    GameId = _apiKey,
+                    ApiKey = _apiKey,
                     UserId = _userId,
                     SessionId = _sessionId,
                     CrashType = crashType,
@@ -407,7 +407,7 @@ namespace LvlUp.Services
     public class CrashReport : EventMetadata
     {
         // Crash-specific fields
-        public string GameId; // Note: This contains the API key, used as game identifier
+        public string ApiKey; // Note: This contains the API key, used as game identifier
         public string UserId;
         public string SessionId;
         public string CrashType;

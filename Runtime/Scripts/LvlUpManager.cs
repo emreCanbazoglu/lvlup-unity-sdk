@@ -278,33 +278,28 @@ namespace LvlUp
         #region Remote Config Service
 
         /// <summary>
-        /// Initialize Remote Config Service
-        /// </summary>
-        /// <param name="gameId">Your game ID</param>
-        /// <param name="environment">Environment (development/staging/production)</param>
-        public static void InitializeRemoteConfig(string gameId, string environment = "production")
-        {
-            Instance._remoteConfigService.Initialize(gameId, Instance._baseUrl, environment, Instance._config.enableDebugLogs);
-        }
-
-        /// <summary>
         /// Access Remote Config Service for config operations
+        /// Automatically initialized after session starts
         /// </summary>
-        public static RemoteConfigService RemoteConfig => Instance._remoteConfigService;
+        public static RemoteConfigService RemoteConfig => _instance?._remoteConfigService;
 
         /// <summary>
-        /// Fetch remote configs asynchronously
+        /// Fetch remote configs from backend (called automatically after geo data fetch)
         /// </summary>
-        public static void FetchRemoteConfigs(Action<bool> onComplete = null)
+        private void FetchRemoteConfigs()
         {
-            if (Instance._remoteConfigService == null || !Instance._remoteConfigService.IsInitialized)
+            if (_remoteConfigService == null || !_remoteConfigService.IsInitialized)
             {
-                Debug.LogError("[LvlUp] Remote Config Service not initialized. Call InitializeRemoteConfig first.");
-                onComplete?.Invoke(false);
+                if (_config.enableDebugLogs)
+                    Debug.LogWarning("[LvlUp] Remote Config Service not initialized.");
                 return;
             }
 
-            Instance._remoteConfigService.FetchAsync(Instance, onComplete);
+            _remoteConfigService.FetchAsync(this, success =>
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Remote configs fetched: {success}");
+            });
         }
 
         /// <summary>
@@ -312,10 +307,85 @@ namespace LvlUp
         /// </summary>
         public static void SetRemoteConfigContext(string platform = null, string version = null, string country = null, string segment = null)
         {
-            if (Instance._remoteConfigService != null && Instance._remoteConfigService.IsInitialized)
+            if (_instance?._remoteConfigService != null && _instance._remoteConfigService.IsInitialized)
             {
-                Instance._remoteConfigService.SetContext(platform, version, country, segment);
+                _instance._remoteConfigService.SetContext(platform, version, country, segment);
             }
+        }
+
+        /// <summary>
+        /// Auto-set RemoteConfig context from current session data
+        /// Called automatically when initializing remote config
+        /// </summary>
+        private void AutoSetRemoteConfigContext()
+        {
+            if (_remoteConfigService == null || !_remoteConfigService.IsInitialized)
+                return;
+
+            string platform = GetPlatform();
+            string version = Application.version;
+            string country = _cachedGeoData?.countryCode;
+            
+            _remoteConfigService.SetContext(platform, version, country);
+            
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] RemoteConfig context set: platform={platform}, version={version}, country={country}");
+        }
+
+        /// <summary>
+        /// Initialize and fetch remote configs (called after geo data is fetched)
+        /// Independent from session lifecycle
+        /// </summary>
+        private void InitializeAndFetchRemoteConfig()
+        {
+            if (!_isInitialized)
+                return;
+
+            try
+            {
+                // Initialize RemoteConfig service
+                _remoteConfigService.Initialize(
+                    _httpClient,
+                    _config.remoteConfigEnvironment,
+                    _config.enableDebugLogs
+                );
+
+                // Set context with current platform, version, and country
+                AutoSetRemoteConfigContext();
+
+                // Fetch remote configs from backend
+                FetchRemoteConfigs();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log("[LvlUp] RemoteConfig initialized and fetching configs...");
+            }
+            catch (Exception e)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.LogError($"[LvlUp] Failed to initialize RemoteConfig: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get current platform as string
+        /// </summary>
+        private string GetPlatform()
+        {
+            #if UNITY_IOS
+                return "iOS";
+            #elif UNITY_ANDROID
+                return "Android";
+            #elif UNITY_WEBGL
+                return "WebGL";
+            #elif UNITY_STANDALONE_WIN
+                return "Windows";
+            #elif UNITY_STANDALONE_OSX
+                return "macOS";
+            #elif UNITY_STANDALONE_LINUX
+                return "Linux";
+            #else
+                return "Unknown";
+            #endif
         }
 
         #endregion
@@ -631,6 +701,7 @@ namespace LvlUp
 
         /// <summary>
         /// Fetch geographic location data asynchronously
+        /// After successful geo fetch, initialize and fetch remote configs
         /// </summary>
         private IEnumerator FetchGeoLocationAsync()
         {
@@ -640,11 +711,17 @@ namespace LvlUp
                     _cachedGeoData = geoData;
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Geo location fetched: {geoData.city}, {geoData.region}, {geoData.country}");
+                    
+                    // After geo data is fetched, initialize and fetch remote configs
+                    InitializeAndFetchRemoteConfig();
                 },
                 onError: (error) =>
                 {
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to fetch geo location: {error}");
+                    
+                    // Still initialize remote config even if geo fetch failed
+                    InitializeAndFetchRemoteConfig();
                 }
             );
         }
@@ -1079,9 +1156,9 @@ namespace LvlUp
         /// </summary>
         public static void AddBreadcrumb(string message, BreadcrumbType type = BreadcrumbType.Navigation, Dictionary<string, object> data = null)
         {
-            if (Instance._crashReporter != null)
+            if (_instance?._crashReporter != null)
             {
-                Instance._crashReporter.AddBreadcrumb(message, type, data);
+                _instance._crashReporter.AddBreadcrumb(message, type, data);
             }
         }
 
@@ -1090,9 +1167,9 @@ namespace LvlUp
         /// </summary>
         public static void ReportException(Exception exception, string context = null, Dictionary<string, object> customData = null)
         {
-            if (Instance._crashReporter != null)
+            if (_instance?._crashReporter != null)
             {
-                Instance._crashReporter.ReportException(exception, context, customData);
+                _instance._crashReporter.ReportException(exception, context, customData);
             }
         }
 
@@ -1101,9 +1178,9 @@ namespace LvlUp
         /// </summary>
         public static void ReportError(string message, string stackTrace = null, Dictionary<string, object> customData = null)
         {
-            if (Instance._crashReporter != null)
+            if (_instance?._crashReporter != null)
             {
-                Instance._crashReporter.ReportError(message, stackTrace, customData);
+                _instance._crashReporter.ReportError(message, stackTrace, customData);
             }
         }
 
@@ -1112,9 +1189,9 @@ namespace LvlUp
         /// </summary>
         public static void SetCrashReportingEnabled(bool enabled)
         {
-            if (Instance._crashReporter != null)
+            if (_instance?._crashReporter != null)
             {
-                Instance._crashReporter.SetEnabled(enabled);
+                _instance._crashReporter.SetEnabled(enabled);
             }
         }
 
