@@ -104,7 +104,7 @@ namespace LvlUp
             }
 
             LvlUpConfig config = configScriptable.ToLvlUpConfig();
-            Instance._Initialize(configScriptable.GetApiKey(), configScriptable.GetBaseUrl(), config, onComplete);
+            Instance._Initialize(configScriptable.GetApiKey(), configScriptable.GetBaseUrl(), config, configScriptable.remoteConfigEnvironment, onComplete);
         }
 
         /// <summary>
@@ -116,10 +116,10 @@ namespace LvlUp
         /// <param name="onComplete">Callback when initialization completes</param>
         public static void Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
         {
-            Instance._Initialize(apiKey, baseUrl, config, onComplete);
+            Instance._Initialize(apiKey, baseUrl, config, "production", onComplete);
         }
 
-        private void _Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
+        private void _Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, string remoteConfigEnvironment = "production", Action<bool, string> onComplete = null)
         {
             if (_isInitialized)
             {
@@ -136,6 +136,12 @@ namespace LvlUp
             _geoService = new GeoLocationService();
             _crashReporter = new CrashReporter(_httpClient, this, _apiKey, null, null);
             _remoteConfigService = new RemoteConfigService();
+            
+            // Initialize Remote Config Service with environment from config
+            _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
+            
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Remote Config initialized with environment: {remoteConfigEnvironment}");
             
             // Enable crash reporting by default
             if (_config.enableCrashReporting)
@@ -1209,6 +1215,38 @@ namespace LvlUp
             }
             
             return userId;
+        }
+
+        /// <summary>
+        /// Get API Key (for debug purposes)
+        /// </summary>
+        public string GetApiKey()
+        {
+            return _apiKey;
+        }
+
+        /// <summary>
+        /// Get Base URL (for debug purposes)
+        /// </summary>
+        public string GetBaseUrl()
+        {
+            return _baseUrl;
+        }
+
+        /// <summary>
+        /// Get Remote Config Service (for debug purposes)
+        /// </summary>
+        public RemoteConfigService GetRemoteConfigService()
+        {
+            return _remoteConfigService;
+        }
+
+        /// <summary>
+        /// Get current config (for debug purposes)
+        /// </summary>
+        public LvlUpConfig GetConfig()
+        {
+            return _config;
         }
 
         #endregion

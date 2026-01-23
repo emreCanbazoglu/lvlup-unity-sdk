@@ -157,7 +157,7 @@ namespace LvlUp.Services
 
                 // Use GET request - backend identifies game from API key in header
                 // Note: LvlUpHttpClient.Get<T> already wraps response in ApiResponse<T>
-                yield return _httpClient.Get<ConfigsData>(endpoint, 
+                yield return _httpClient.Get<ConfigsResponse>(endpoint, 
                     callback: (response) =>
                     {
                         success = response.success;
@@ -196,9 +196,9 @@ namespace LvlUp.Services
 
             // All retries failed, try to load from cache
             Debug.Log("[LvlUp] All fetch attempts failed, trying cache...");
-            if (_cacheService.TryLoadConfigs(_currentEnvironment, out var cachedConfigsData))
+            if (_cacheService.TryLoadConfigs(_currentEnvironment, out var cachedConfigsResponse))
             {
-                ProcessConfigsResponse(cachedConfigsData);
+                ProcessConfigsResponse(cachedConfigsResponse);
                 _isFetching = false;
                 onComplete?.Invoke(true);
             }
@@ -210,76 +210,23 @@ namespace LvlUp.Services
             }
         }
 
-        private void ProcessConfigsResponse(ConfigsData configsData)
+        private void ProcessConfigsResponse(ConfigsResponse configsResponse)
         {
-            if (configsData?.configs == null)
+            if (configsResponse?.configs == null)
             {
                 Debug.LogWarning("[LvlUp] Invalid configs response");
                 return;
             }
 
-            // Convert the configs object (dictionary) to a list of ConfigData
-            List<ConfigData> configList = ConvertConfigsToConfigDataList(configsData.configs);
+            // Convert array to list
+            List<ConfigData> configList = new List<ConfigData>(configsResponse.configs);
 
-            ProcessConfigs(configList, configsData, isFromCache: false);
+            // Process the configs
+            ProcessConfigs(configList, configsResponse, isFromCache: false);
         }
 
-        private List<ConfigData> ConvertConfigsToConfigDataList(object configsObject)
-        {
-            var configList = new List<ConfigData>();
 
-            if (configsObject == null)
-                return configList;
-
-            // Handle Dictionary<string, object> format from backend
-            if (configsObject is Dictionary<string, object> configDict)
-            {
-                foreach (var kvp in configDict)
-                {
-                    configList.Add(new ConfigData
-                    {
-                        key = kvp.Key,
-                        value = SimpleJson.ToJson(kvp.Value),
-                        dataType = kvp.Value?.GetType().Name ?? "object",
-                        isEnabled = true,
-                        environment = _currentEnvironment,
-                        createdAt = DateTime.UtcNow.ToUnixTimestamp(),
-                        updatedAt = DateTime.UtcNow.ToUnixTimestamp(),
-                    });
-                }
-            }
-            else
-            {
-                // Fallback: try to reflect over object's fields
-                try
-                {
-                    var fields = configsObject.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                    
-                    foreach (var field in fields)
-                    {
-                        var value = field.GetValue(configsObject);
-                        configList.Add(new ConfigData
-                        {
-                            key = field.Name,
-                            value = SimpleJson.ToJson(value),
-                            dataType = value?.GetType().Name ?? "object",
-                            isEnabled = true,
-                            environment = _currentEnvironment,
-                            createdAt = DateTime.UtcNow.ToUnixTimestamp(),
-                            updatedAt = DateTime.UtcNow.ToUnixTimestamp(),
-                        });
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[LvlUp] Could not convert configs object: {e.Message}");
-                }
-            }
-
-            return configList;
-        }
-
-        private void ProcessConfigs(List<ConfigData> configs, ConfigsData configsData, bool isFromCache)
+        private void ProcessConfigs(List<ConfigData> configs, ConfigsResponse configsResponse, bool isFromCache)
         {
             // Clear and rebuild dictionary
             _configs.Clear();
@@ -292,9 +239,9 @@ namespace LvlUp.Services
             }
 
             // Save to cache if from server
-            if (!isFromCache && configsData != null)
+            if (!isFromCache && configsResponse != null)
             {
-                _cacheService.SaveConfigs(configsData, _currentEnvironment);
+                _cacheService.SaveConfigs(configsResponse, _currentEnvironment);
             }
 
             // Fire event
@@ -331,7 +278,8 @@ namespace LvlUp.Services
 
             try
             {
-                if (int.TryParse(config.value, out int result))
+                string valueStr = config.GetValueAsString();
+                if (int.TryParse(valueStr, out int result))
                     return result;
             }
             catch (Exception e)
@@ -359,7 +307,8 @@ namespace LvlUp.Services
                 return defaultValue;
             }
 
-            return !string.IsNullOrEmpty(config.value) ? config.value : defaultValue;
+            string valueStr = config.GetValueAsString();
+            return !string.IsNullOrEmpty(valueStr) ? valueStr : defaultValue;
         }
 
         /// <summary>
@@ -381,11 +330,12 @@ namespace LvlUp.Services
 
             try
             {
-                if (bool.TryParse(config.value, out bool result))
+                string valueStr = config.GetValueAsString();
+                if (bool.TryParse(valueStr, out bool result))
                     return result;
 
                 // Also check for 0/1 convention
-                if (int.TryParse(config.value, out int intValue))
+                if (int.TryParse(valueStr, out int intValue))
                     return intValue != 0;
             }
             catch (Exception e)
@@ -415,7 +365,8 @@ namespace LvlUp.Services
 
             try
             {
-                if (float.TryParse(config.value, out float result))
+                string valueStr = config.GetValueAsString();
+                if (float.TryParse(valueStr, out float result))
                     return result;
             }
             catch (Exception e)
@@ -445,10 +396,9 @@ namespace LvlUp.Services
 
             try
             {
-                if (string.IsNullOrEmpty(config.value))
-                    return defaultValue;
-
-                return JsonUtility.FromJson<T>(config.value);
+                // Use the GetValue<T> method from ConfigData which handles
+                // JToken, object, and string conversions properly
+                return config.GetValue<T>() ?? defaultValue;
             }
             catch (Exception e)
             {
@@ -516,6 +466,14 @@ namespace LvlUp.Services
         /// Check if service is initialized
         /// </summary>
         public bool IsInitialized => _isInitialized;
+
+        /// <summary>
+        /// Get current environment
+        /// </summary>
+        public string GetCurrentEnvironment()
+        {
+            return _currentEnvironment;
+        }
 
         #endregion
     }

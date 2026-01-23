@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
-using LvlUp.Utils;
+using Newtonsoft.Json;
 
 namespace LvlUp.RemoteConfig
 {
@@ -42,11 +41,11 @@ namespace LvlUp.RemoteConfig
         /// <summary>
         /// Save configs to cache file with timestamp
         /// </summary>
-        public void SaveConfigs(ConfigsData configsData, string environment)
+        public void SaveConfigs(ConfigsResponse configsResponse, string environment)
         {
             try
             {
-                string json = SimpleJson.ToJson(configsData);
+                string json = JsonConvert.SerializeObject(configsResponse, Formatting.Indented);
                 string cacheFilePath = GetCacheFilePath(environment);
 
                 // Write to file
@@ -63,9 +62,9 @@ namespace LvlUp.RemoteConfig
         /// <summary>
         /// Load configs from cache file if valid
         /// </summary>
-        public bool TryLoadConfigs(string environment, out ConfigsData configsData)
+        public bool TryLoadConfigs(string environment, out ConfigsResponse configsResponse)
         {
-            configsData = null;
+            configsResponse = null;
 
             try
             {
@@ -87,9 +86,9 @@ namespace LvlUp.RemoteConfig
 
                 // Load and deserialize
                 string json = File.ReadAllText(cacheFilePath);
-                configsData = SimpleJson.FromJson<ConfigsData>(json);
+                configsResponse = JsonConvert.DeserializeObject<ConfigsResponse>(json);
 
-                if (configsData?.configs != null)
+                if (configsResponse?.configs != null)
                 {
                     Debug.Log($"[LvlUp] Loaded cached configs from {cacheFilePath}");
                     return true;
@@ -202,29 +201,6 @@ namespace LvlUp.RemoteConfig
         {
             return $"{_gameId}_*{CACHE_FILE_EXTENSION}";
         }
-    }
-
-    /// <summary>
-    /// Game configuration data structure - generic key-value based
-    /// </summary>
-    [Serializable]
-    public class ConfigsData
-    {
-        public Dictionary<string, object> configs;  // Dictionary of key-value pairs - can be any config values
-        public ConfigMetadata metadata; // Metadata about the configs fetch
-    }
-
-    /// <summary>
-    /// Config metadata
-    /// </summary>
-    [Serializable]
-    public class ConfigMetadata
-    {
-        public string gameId;
-        public string environment;
-        public string fetchedAt;
-        public string cacheUntil;
-        public int totalConfigs;
     }
 
     /// <summary>

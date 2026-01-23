@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace LvlUp.RemoteConfig
 {
@@ -11,12 +13,63 @@ namespace LvlUp.RemoteConfig
     public class ConfigData
     {
         public string key;
-        public string value;
+        public object value; // Changed from string to object to handle any JSON type
         public string dataType;
         public bool isEnabled = true;
         public string environment;
         public long createdAt;
         public long updatedAt;
+
+        /// <summary>
+        /// Get the value as a string (serialized JSON if object/array)
+        /// </summary>
+        public string GetValueAsString()
+        {
+            if (value == null)
+                return null;
+
+            // If it's already a string, return it
+            if (value is string str)
+                return str;
+
+            // If it's a JToken (Newtonsoft's JSON type), convert to string
+            if (value is JToken jToken)
+                return jToken.ToString(Formatting.None);
+
+            // Otherwise serialize it
+            return JsonConvert.SerializeObject(value);
+        }
+
+        /// <summary>
+        /// Get the value as a typed object
+        /// </summary>
+        public T GetValue<T>()
+        {
+            if (value == null)
+                return default(T);
+
+            // If it's already the right type, return it
+            if (value is T typed)
+                return typed;
+
+            // If it's a JToken, convert it
+            if (value is JToken jToken)
+                return jToken.ToObject<T>();
+
+            // Try to convert from string
+            if (value is string str)
+                return JsonConvert.DeserializeObject<T>(str);
+
+            // Try direct conversion
+            try
+            {
+                return (T)Convert.ChangeType(value, typeof(T));
+            }
+            catch
+            {
+                return default(T);
+            }
+        }
     }
 
 
@@ -29,17 +82,30 @@ namespace LvlUp.RemoteConfig
         public ConfigData[] configs;
         public long timestamp;
     }
-
+    
     /// <summary>
-    /// Container for all fetched configs
+    /// Game configuration data structure - generic key-value based
     /// </summary>
     [Serializable]
-    public class RemoteConfigCache
+    public class ConfigsData
     {
-        public List<ConfigData> configs = new List<ConfigData>();
-        public long fetchedAt;
-        public string environment;
+        public Dictionary<string, object> configs;  // Dictionary of key-value pairs - can be any config values
+        public ConfigMetadata metadata; // Metadata about the configs fetch
     }
+
+    /// <summary>
+    /// Config metadata
+    /// </summary>
+    [Serializable]
+    public class ConfigMetadata
+    {
+        public string gameId;
+        public string environment;
+        public string fetchedAt;
+        public string cacheUntil;
+        public int totalConfigs;
+    }
+
 
     /// <summary>
     /// Fetch request parameters

@@ -5,7 +5,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 using LvlUp.Models;
-using LvlUp.Utils;
+using Newtonsoft.Json;
 
 namespace LvlUp.Services
 {
@@ -57,7 +57,7 @@ namespace LvlUp.Services
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
             // Use empty object {} if body is null, instead of "null" string
-            string jsonBody = body == null ? "{}" : SimpleJson.ToJson(body);
+            string jsonBody = body == null ? "{}" : JsonConvert.SerializeObject(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] POST {url}\nBody: {jsonBody}");
@@ -85,7 +85,7 @@ namespace LvlUp.Services
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
             // Use empty object {} if body is null, instead of "null" string
-            string jsonBody = body == null ? "{}" : SimpleJson.ToJson(body);
+            string jsonBody = body == null ? "{}" : JsonConvert.SerializeObject(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] PUT {url}\nBody: {jsonBody}");
@@ -144,18 +144,30 @@ namespace LvlUp.Services
                     if (_debugLogs)
                         Debug.Log($"[LvlUp] Response: {responseText}");
 
-                    var response = SimpleJson.FromJson<ApiResponse<T>>(responseText);
+                    // Try to deserialize as ApiResponse<T> first
+                    var response = JsonConvert.DeserializeObject<ApiResponse<T>>(responseText);
                     
-                    if (response == null)
+                    // If response is null or data is null, try deserializing directly to T
+                    if (response == null || response.data == null)
                     {
-                        response = new ApiResponse<T>
+                        var directData = JsonConvert.DeserializeObject<T>(responseText);
+                        
+                        if (directData != null)
                         {
-                            success = true,
-                            data = SimpleJson.FromJson<T>(responseText)
-                        };
+                            // Backend returned T directly, wrap it in ApiResponse
+                            response = new ApiResponse<T>
+                            {
+                                success = true,
+                                data = directData
+                            };
+                        }
                     }
 
-                    return response;
+                    return response ?? new ApiResponse<T>
+                    {
+                        success = false,
+                        error = "Failed to deserialize response"
+                    };
                 }
                 catch (Exception ex)
                 {
@@ -199,7 +211,7 @@ namespace LvlUp.Services
                     if (_debugLogs)
                         Debug.Log($"[LvlUp] Response: {responseText}");
 
-                    var response = SimpleJson.FromJson<ApiResponse>(responseText);
+                    var response = JsonConvert.DeserializeObject<ApiResponse>(responseText);
                     return response ?? new ApiResponse { success = true };
                 }
                 catch (Exception ex)

@@ -27,3 +27,4 @@ MonoBehaviour:
   enableGeoTracking: 1
   autoTrackScenes: 0
   enableCrashReporting: 1
+  remoteConfigEnvironment: production
