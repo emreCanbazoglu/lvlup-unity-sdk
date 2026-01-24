@@ -122,53 +122,11 @@ namespace LvlUp.Models
             target.longitude = this.longitude;
             target.timezone = this.timezone;
         }
-    }
-
-    /// <summary>
-    /// Event data for tracking - includes all metadata from backend Event model
-    /// Base class for all trackable events
-    /// </summary>
-    [Serializable]
-    public class LvlUpEvent : EventMetadata
-    {
-        public string eventName;
-        public Dictionary<string, object> properties;
-        public string timestamp;
-
-        public LvlUpEvent(string eventName, Dictionary<string, object> properties = null)
-        {
-            this.eventName = eventName;
-            this.properties = properties ?? new Dictionary<string, object>();
-            this.timestamp = DateTime.UtcNow.ToString("o");
-            
-            // Generate unique event ID
-            this.eventUuid = Guid.NewGuid().ToString();
-            this.clientTs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            
-            // Auto-populate device and platform info
-            PopulateDeviceInfo();
-        }
 
         /// <summary>
-        /// Convert this LvlUpEvent to an EventDataItem for batch sending
-        /// Virtual so subclasses can override to include their custom fields
+        /// Auto-populate device and platform information
         /// </summary>
-        public virtual EventDataItem ToEventDataItem()
-        {
-            var item = new EventDataItem
-            {
-                eventName = this.eventName,
-                properties = this.properties,
-                timestamp = this.timestamp
-            };
-            
-            // Copy all metadata
-            this.CopyTo(item);
-            
-            return item;
-        }
-        
-        private void PopulateDeviceInfo()
+        public void PopulateDeviceInfo()
         {
 #if UNITY_EDITOR
             this.platform = "editor";
@@ -253,12 +211,29 @@ namespace LvlUp.Models
             {
                 // Silently fail if not available
             }
+#elif UNITY_EDITOR
+            this.manufacturer = "Editor";
+            // In editor, try to get build number from PlayerSettings based on build target
+            try
+            {
+#if UNITY_ANDROID
+                this.appBuild = UnityEngine.PlayerSettings.Android.bundleVersionCode.ToString();
+#elif UNITY_IOS
+                this.appBuild = UnityEngine.PlayerSettings.iOS.buildNumber;
+#else
+                this.appBuild = "1"; // Default for editor
+#endif
+            }
+            catch (Exception)
+            {
+                this.appBuild = "1"; // Fallback
+            }
 #endif
             
             // Note: Geographic location is NOT auto-populated here because it requires async network call
             // Use LvlUpManager.FetchAndPopulateGeoLocation() or manually set geo fields if needed
         }
-        
+
         /// <summary>
         /// Manually set geographic location data
         /// </summary>
@@ -272,6 +247,51 @@ namespace LvlUp.Models
             this.latitude = latitude;
             this.longitude = longitude;
             this.timezone = timezone;
+        }
+    }
+
+    /// <summary>
+    /// Event data for tracking - includes all metadata from backend Event model
+    /// Base class for all trackable events
+    /// </summary>
+    [Serializable]
+    public class LvlUpEvent : EventMetadata
+    {
+        public string eventName;
+        public Dictionary<string, object> properties;
+        public string timestamp;
+
+        public LvlUpEvent(string eventName, Dictionary<string, object> properties = null)
+        {
+            this.eventName = eventName;
+            this.properties = properties ?? new Dictionary<string, object>();
+            this.timestamp = DateTime.UtcNow.ToString("o");
+            
+            // Generate unique event ID
+            this.eventUuid = Guid.NewGuid().ToString();
+            this.clientTs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            
+            // Auto-populate device and platform info
+            PopulateDeviceInfo();
+        }
+
+        /// <summary>
+        /// Convert this LvlUpEvent to an EventDataItem for batch sending
+        /// Virtual so subclasses can override to include their custom fields
+        /// </summary>
+        public virtual EventDataItem ToEventDataItem()
+        {
+            var item = new EventDataItem
+            {
+                eventName = this.eventName,
+                properties = this.properties,
+                timestamp = this.timestamp
+            };
+            
+            // Copy all metadata
+            this.CopyTo(item);
+            
+            return item;
         }
     }
 
@@ -540,6 +560,61 @@ namespace LvlUp.Models
         
         // Note: All device/platform/app/geo metadata auto-populated by LvlUpEvent base class
         // Captures current state at session end (battery, connection, location changes, etc.)
+    }
+    
+    /// <summary>
+    /// Crash report data model - extends EventMetadata for consistency
+    /// </summary>
+    [Serializable]
+    public class CrashReport : EventMetadata
+    {
+        // Crash-specific fields
+        public string GameId; // Note: This contains the API key, used as game identifier
+        public string UserId;
+        public string SessionId;
+        public string CrashType;
+        public string Severity;
+        public string Message;
+        public string StackTrace;
+        public string ExceptionType;
+        
+        // System info (not in EventMetadata)
+        public long? MemoryUsage;
+        public float? BatteryLevel;
+        
+        // Context
+        public List<Breadcrumb> Breadcrumbs;
+        public Dictionary<string, object> CustomData;
+        public DateTime Timestamp;
+        
+        public CrashReport()
+        {
+            // Generate unique event ID
+            this.eventUuid = Guid.NewGuid().ToString();
+            this.clientTs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            this.Timestamp = DateTime.UtcNow;
+            
+            // Auto-populate device and platform info
+            PopulateDeviceInfo();
+        }
+        
+        // Note: Device/Platform/App metadata inherited from EventMetadata:
+        // - platform, osVersion, manufacturer, device, deviceId
+        // - appVersion, appBuild, bundleId, engineVersion, sdkVersion
+        // - connectionType, sessionNum, country, city, etc.
+        // Auto-populated in constructor via PopulateDeviceInfo()
+    }
+    
+    /// <summary>
+    /// Breadcrumb for tracking user actions
+    /// </summary>
+    [Serializable]
+    public class Breadcrumb
+    {
+        public string Timestamp; // ISO 8601 string format for proper JSON serialization
+        public string Message;
+        public string Type;
+        public Dictionary<string, object> Data;
     }
 }
 

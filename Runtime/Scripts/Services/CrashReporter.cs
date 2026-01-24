@@ -16,25 +16,30 @@ namespace LvlUp.Services
         private readonly LvlUpHttpClient _httpClient;
         private readonly MonoBehaviour _coroutineRunner;
         private readonly string _apiKey;
+        private readonly Func<GeoData> _getGeoDataFunc; // Delegate to get geo data without tight coupling
 
-        private readonly Dictionary<CrashReport, int> _failedReports = new Dictionary<CrashReport, int>();
+        private readonly Dictionary<Models.CrashReport, int> _failedReports 
+            = new Dictionary<Models.CrashReport, int>();
         
         private string _userId;
         private string _sessionId;
-        private bool _isEnabled = true;
+        private bool _isEnabled = false;
         private bool _handlersRegistered = false; // Track if handlers are already registered
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 50;
         private const int MAX_RETRY_ATTEMPTS = 3;
         private bool _isReporting = false; // Prevent recursive crash reporting
 
-        public CrashReporter(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner, string apiKey, string userId = null, string sessionId = null)
+        public CrashReporter(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner, string apiKey, Func<GeoData> getGeoDataFunc = null, string userId = null, string sessionId = null)
         {
             _httpClient = httpClient;
             _coroutineRunner = coroutineRunner;
             _apiKey = apiKey;
+            _getGeoDataFunc = getGeoDataFunc;
             _userId = userId;
             _sessionId = sessionId;
+            
+            SetEnabled(_isEnabled);
         }
 
         /// <summary>
@@ -185,7 +190,7 @@ namespace LvlUp.Services
             _isReporting = true;
             try
             {
-                var report = new CrashReport
+                var report = new Models.CrashReport
                 {
                     GameId = _apiKey,
                     UserId = _userId,
@@ -195,22 +200,6 @@ namespace LvlUp.Services
                     Message = message,
                     StackTrace = stackTrace,
                     ExceptionType = exceptionType ?? "UnknownException",
-                    
-                    // Device & Platform info (inherited from EventMetadata)
-                    platform = GetPlatform(),
-                    osVersion = SystemInfo.operatingSystem,
-                    manufacturer = SystemInfo.deviceModel.Split(' ')[0],
-                    device = SystemInfo.deviceModel,
-                    deviceId = SystemInfo.deviceUniqueIdentifier,
-                    
-                    // App info (inherited from EventMetadata)
-                    appVersion = Application.version,
-                    bundleId = Application.identifier,
-                    engineVersion = $"unity {Application.unityVersion}",
-                    sdkVersion = "unity 1.0.0",
-                    
-                    // Connection type (inherited from EventMetadata)
-                    connectionType = GetConnectionType(),
                     
                     // System info
                     MemoryUsage = (long)UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong(),
@@ -222,6 +211,24 @@ namespace LvlUp.Services
                     
                     Timestamp = DateTime.UtcNow
                 };
+
+                // Apply geo data if available via the delegate function
+                if (_getGeoDataFunc != null)
+                {
+                    var geoData = _getGeoDataFunc();
+                    if (geoData != null && geoData.IsValid())
+                    {
+                        report.SetGeoLocation(
+                            geoData.country,
+                            geoData.countryCode,
+                            geoData.region,
+                            geoData.city,
+                            geoData.latitude,
+                            geoData.longitude,
+                            geoData.timezone
+                        );
+                    }
+                }
 
                 // Send immediately
                 Debug.Log("[LvlUp CrashReporter] Sending crash report immediately");
@@ -238,7 +245,7 @@ namespace LvlUp.Services
         /// <summary>
         /// Send a single crash report asynchronously
         /// </summary>
-        private void SendSingleCrashReport(CrashReport report)
+        private void SendSingleCrashReport(Models.CrashReport report)
         {
             try
             {
@@ -341,41 +348,6 @@ namespace LvlUp.Services
             );
         }
 
-        /// <summary>
-        /// Get current platform string
-        /// </summary>
-        private string GetPlatform()
-        {
-#if UNITY_ANDROID
-            return "android";
-#elif UNITY_IOS
-            return "ios";
-#elif UNITY_WEBGL
-            return "webgl";
-#elif UNITY_STANDALONE_WIN
-            return "windows";
-#elif UNITY_STANDALONE_OSX
-            return "macos";
-#elif UNITY_STANDALONE_LINUX
-            return "linux";
-#else
-            return "unknown";
-#endif
-        }
-
-        /// <summary>
-        /// Get current connection type
-        /// </summary>
-        private string GetConnectionType()
-        {
-            if (Application.internetReachability == NetworkReachability.NotReachable)
-                return "offline";
-            else if (Application.internetReachability == NetworkReachability.ReachableViaCarrierDataNetwork)
-                return "wwan";
-            else if (Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork)
-                return "wifi";
-            return "unknown";
-        }
 
         /// <summary>
         /// Clear all breadcrumbs
@@ -384,49 +356,6 @@ namespace LvlUp.Services
         {
             _breadcrumbs.Clear();
         }
-    }
-
-    /// <summary>
-    /// Crash report data model - extends EventMetadata for consistency
-    /// </summary>
-    [Serializable]
-    public class CrashReport : EventMetadata
-    {
-        // Crash-specific fields
-        public string GameId; // Note: This contains the API key, used as game identifier
-        public string UserId;
-        public string SessionId;
-        public string CrashType;
-        public string Severity;
-        public string Message;
-        public string StackTrace;
-        public string ExceptionType;
-        
-        // System info (not in EventMetadata)
-        public long? MemoryUsage;
-        public float? BatteryLevel;
-        
-        // Context
-        public List<Breadcrumb> Breadcrumbs;
-        public Dictionary<string, object> CustomData;
-        public DateTime Timestamp;
-        
-        // Note: Device/Platform/App metadata inherited from EventMetadata:
-        // - platform, osVersion, manufacturer, device, deviceId
-        // - appVersion, appBuild, bundleId, engineVersion, sdkVersion
-        // - connectionType, sessionNum, country, city, etc.
-    }
-
-    /// <summary>
-    /// Breadcrumb for tracking user actions
-    /// </summary>
-    [Serializable]
-    public class Breadcrumb
-    {
-        public string Timestamp; // ISO 8601 string format for proper JSON serialization
-        public string Message;
-        public string Type;
-        public Dictionary<string, object> Data;
     }
 
     /// <summary>
