@@ -22,7 +22,7 @@ namespace LvlUp.Services
         private string _userId;
         private string _sessionId;
         private bool _isEnabled = true;
-        private bool _autoCapture = true;
+        private bool _handlersRegistered = false; // Track if handlers are already registered
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 50;
         private const int MAX_RETRY_ATTEMPTS = 3;
@@ -42,9 +42,11 @@ namespace LvlUp.Services
         /// </summary>
         public void SetEnabled(bool enabled)
         {
+            if(enabled == _isEnabled) return; // No change, skip
+            
             _isEnabled = enabled;
             
-            if (enabled && _autoCapture)
+            if (enabled)
             {
                 RegisterExceptionHandlers();
             }
@@ -53,28 +55,6 @@ namespace LvlUp.Services
                 UnregisterExceptionHandlers();
             }
         }
-        
-
-        /// <summary>
-        /// Enable or disable automatic exception capture
-        /// </summary>
-        public void SetAutoCapture(bool autoCapture)
-        {
-            _autoCapture = autoCapture;
-            
-            if (_isEnabled)
-            {
-                if (autoCapture)
-                {
-                    RegisterExceptionHandlers();
-                }
-                else
-                {
-                    UnregisterExceptionHandlers();
-                }
-            }
-        }
-
         
         /// <summary>
         /// Set the user ID for crash reports
@@ -94,7 +74,10 @@ namespace LvlUp.Services
         /// </summary>
         private void RegisterExceptionHandlers()
         {
+            if (_handlersRegistered) return; // Already registered, skip
+            
             Application.logMessageReceived += HandleLogMessage;
+            _handlersRegistered = true;
         }
 
         /// <summary>
@@ -102,7 +85,10 @@ namespace LvlUp.Services
         /// </summary>
         private void UnregisterExceptionHandlers()
         {
+            if (!_handlersRegistered) return; // Not registered, skip
+            
             Application.logMessageReceived -= HandleLogMessage;
+            _handlersRegistered = false;
         }
 
         /// <summary>
@@ -155,7 +141,7 @@ namespace LvlUp.Services
         {
             var breadcrumb = new Breadcrumb
             {
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.UtcNow.ToString("o"), // ISO 8601 format for proper JSON serialization
                 Message = message,
                 Type = type.ToString(),
                 Data = data
@@ -437,7 +423,7 @@ namespace LvlUp.Services
     [Serializable]
     public class Breadcrumb
     {
-        public DateTime Timestamp;
+        public string Timestamp; // ISO 8601 string format for proper JSON serialization
         public string Message;
         public string Type;
         public Dictionary<string, object> Data;

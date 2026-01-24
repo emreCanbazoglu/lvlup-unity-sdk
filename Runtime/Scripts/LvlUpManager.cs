@@ -109,7 +109,6 @@ namespace LvlUp
             if (_config.enableCrashReporting)
             {
                 _crashReporter.SetEnabled(true);
-                _crashReporter.SetAutoCapture(true);
             }
             
             _isInitialized = true;
