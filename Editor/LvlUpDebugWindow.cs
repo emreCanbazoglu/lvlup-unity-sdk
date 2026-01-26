@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.Linq;
 using LvlUp.RemoteConfig;
+using LvlUp.Utils;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -15,6 +16,7 @@ namespace LvlUp.Editor
     {
         private Vector2 _scrollPosition;
         private string _selectedEnvironment = "production";
+        private string _selectedPlatform = "editor";
         private bool _showApiKey;
         private LvlUpConfigScriptable _config;
         private string _configSearchFilter = "";
@@ -38,6 +40,16 @@ namespace LvlUp.Editor
         private void OnEnable()
         {
             LoadConfig();
+            
+            // Load platform override if set
+            if (LvlUpDebugSettings.HasPlatformOverride)
+            {
+                _selectedPlatform = LvlUpDebugSettings.PlatformOverride;
+            }
+            else
+            {
+                _selectedPlatform = "editor";
+            }
         }
 
         private void LoadConfig()
@@ -108,6 +120,10 @@ namespace LvlUp.Editor
             {
                 DrawEnvironmentSection();
                 EditorGUILayout.Space(10);
+                
+                // Platform Simulation Section (Editor only)
+                DrawPlatformSimulationSection();
+                EditorGUILayout.Space(10);
             }
 
             // Remote Config Section
@@ -145,6 +161,27 @@ namespace LvlUp.Editor
                 GUILayout.Label("Session ID:", _labelStyle, GUILayout.Width(120));
                 GUILayout.Label(session != null ? session.sessionId : "N/A", _valueStyle);
                 EditorGUILayout.EndHorizontal();
+                
+                // Show platform override if active
+#if UNITY_EDITOR
+                if (LvlUpDebugSettings.HasPlatformOverride)
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    GUILayout.Label("Platform:", _labelStyle, GUILayout.Width(120));
+                    GUIStyle platformStyle = new GUIStyle(EditorStyles.label);
+                    platformStyle.normal.textColor = Color.cyan;
+                    platformStyle.fontStyle = FontStyle.Bold;
+                    GUILayout.Label(LvlUpDebugSettings.PlatformOverride.ToUpper() + " (Simulated)", platformStyle);
+                    EditorGUILayout.EndHorizontal();
+                }
+                else
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    GUILayout.Label("Platform:", _labelStyle, GUILayout.Width(120));
+                    GUILayout.Label("editor", _valueStyle);
+                    EditorGUILayout.EndHorizontal();
+                }
+#endif
             }
 
             EditorGUILayout.EndVertical();
@@ -240,6 +277,78 @@ namespace LvlUp.Editor
                         "OK");
                     Debug.Log($"[LvlUp Debug] Environment changed to: {_selectedEnvironment}. Enter Play mode to apply changes.");
                 }
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawPlatformSimulationSection()
+        {
+            EditorGUILayout.BeginVertical(_sectionStyle);
+            GUILayout.Label("Platform Simulation (Editor Only)", EditorStyles.boldLabel);
+            EditorGUILayout.Space(5);
+
+            EditorGUILayout.HelpBox("Simulate different platforms to test platform-specific behavior. The simulated platform will be reported in all events.", MessageType.Info);
+            
+            EditorGUILayout.Space(5);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label("Simulate Platform:", _labelStyle, GUILayout.Width(120));
+            
+            string[] platforms = new string[] { "editor", "ios", "android", "webgl", "windows", "macos", "linux" };
+            string[] platformLabels = new string[] { "Editor (Default)", "iOS", "Android", "WebGL", "Windows", "macOS", "Linux" };
+            int currentIndex = System.Array.IndexOf(platforms, _selectedPlatform);
+            if (currentIndex == -1) currentIndex = 0;
+            
+            int newIndex = EditorGUILayout.Popup(currentIndex, platformLabels);
+            if (newIndex != currentIndex)
+            {
+                _selectedPlatform = platforms[newIndex];
+            }
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(5);
+            EditorGUILayout.BeginHorizontal();
+            
+            if (GUILayout.Button("Apply Platform"))
+            {
+                if (_selectedPlatform == "editor")
+                {
+                    LvlUpDebugSettings.ClearPlatformOverride();
+                    EditorUtility.DisplayDialog("Platform Reset", 
+                        "Platform simulation disabled. SDK will report 'editor' as platform.\n\nEnter Play mode to apply changes.", 
+                        "OK");
+                    Debug.Log($"[LvlUp Debug] Platform override cleared. Using default 'editor' platform.");
+                }
+                else
+                {
+                    LvlUpDebugSettings.PlatformOverride = _selectedPlatform;
+                    EditorUtility.DisplayDialog("Platform Simulation", 
+                        $"Platform simulation set to: {_selectedPlatform}\n\nEnter Play mode to apply changes.\n\nAll events will report '{_selectedPlatform}' as the platform.", 
+                        "OK");
+                    Debug.Log($"[LvlUp Debug] Platform override set to: {_selectedPlatform}. Enter Play mode to apply changes.");
+                }
+            }
+            
+            if (GUILayout.Button("Reset to Default"))
+            {
+                _selectedPlatform = "editor";
+                LvlUpDebugSettings.ClearPlatformOverride();
+                Debug.Log($"[LvlUp Debug] Platform override cleared.");
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            // Show current override if set
+            if (LvlUpDebugSettings.HasPlatformOverride)
+            {
+                EditorGUILayout.Space(5);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Current Override:", _labelStyle, GUILayout.Width(120));
+                GUIStyle activeStyle = new GUIStyle(EditorStyles.label);
+                activeStyle.normal.textColor = Color.cyan;
+                activeStyle.fontStyle = FontStyle.Bold;
+                GUILayout.Label(LvlUpDebugSettings.PlatformOverride.ToUpper(), activeStyle);
+                EditorGUILayout.EndHorizontal();
             }
 
             EditorGUILayout.EndVertical();

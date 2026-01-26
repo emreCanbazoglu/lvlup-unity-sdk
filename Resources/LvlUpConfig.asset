@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5097187a3f5294d32a5ad5524fbce403, type: 3}
   m_Name: LvlUpConfig
   m_EditorClassIdentifier: 
-  apiKey: sr3d_api_key_67890
+  apiKey: cbp_api_key_11111
   baseUrl: http://localhost:3000/api
   enableDebugLogs: 1
   autoTrackSessions: 1
@@ -27,4 +27,4 @@ MonoBehaviour:
   enableGeoTracking: 1
   autoTrackScenes: 0
   enableCrashReporting: 1
-  remoteConfigEnvironment: production
+  remoteConfigEnvironment: development

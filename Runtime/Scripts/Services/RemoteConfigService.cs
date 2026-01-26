@@ -146,8 +146,18 @@ namespace LvlUp.Services
 
                 // Build endpoint with query parameters for context
                 string endpoint = $"config/configs?environment={_currentEnvironment}";
-                if (!string.IsNullOrEmpty(_contextPlatform))
-                    endpoint += $"&platform={_contextPlatform}";
+                
+                // Use platform override if set (for editor testing), otherwise use context platform
+                string platformToUse = _contextPlatform;
+#if UNITY_EDITOR
+                if (LvlUpDebugSettings.HasPlatformOverride)
+                {
+                    platformToUse = LvlUpDebugSettings.PlatformOverride;
+                }
+#endif
+                
+                if (!string.IsNullOrEmpty(platformToUse))
+                    endpoint += $"&platform={platformToUse}";
                 if (!string.IsNullOrEmpty(_contextVersion))
                     endpoint += $"&version={_contextVersion}";
                 if (!string.IsNullOrEmpty(_contextCountry))
