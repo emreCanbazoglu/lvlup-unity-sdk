@@ -246,6 +246,13 @@ namespace LvlUp.Services
         /// </summary>
         private void SendSingleCrashReport(Models.CrashReport report)
         {
+            if(_coroutineRunner == null || _httpClient == null)
+            {
+                Debug.LogWarning("[LvlUp CrashReporter] Cannot send crash report: Coroutine runner or HTTP client is null");
+                _isReporting = false;
+                return;
+            }
+            
             try
             {
                 // API key is sent in X-API-Key header, not in URL (same pattern as event tracking)
