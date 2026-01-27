@@ -1,7 +1,6 @@
-using System;
-using UnityEngine;
-using LvlUp;
 using LvlUp.AdIntegration;
+using UnityEngine;
+using LvlUp.Services;
 
 namespace LvlUp.Examples
 {

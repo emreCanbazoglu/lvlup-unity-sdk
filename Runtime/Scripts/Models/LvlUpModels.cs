@@ -645,18 +645,5 @@ namespace LvlUp.Models
         public long impressionTimestamp;  // Unix timestamp in milliseconds
         public string customData;         // Optional custom data as JSON string
     }
-
-    /// <summary>
-    /// Ad monetization event wrapper
-    /// Contains ad impression data along with standard event metadata
-    /// </summary>
-    [Serializable]
-    public class AdMonetizationEvent
-    {
-        public string eventType;          // "ad_impression"
-        public AdImpressionData adData;
-        public EventMetadata metadata;
-        public long timestamp;            // Unix timestamp in milliseconds
-    }
 }
 

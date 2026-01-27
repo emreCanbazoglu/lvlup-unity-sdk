@@ -144,6 +144,7 @@ namespace LvlUp
             
             // Initialize Remote Config Service with environment from config
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
+            _adMonetizationService.Initialize(_httpClient, this );
             
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] Remote Config initialized with environment: {remoteConfigEnvironment}");
@@ -569,25 +570,6 @@ namespace LvlUp
                     _hasOfflineSession = false;
                     
                     _crashReporter.SetSessionId(_currentSession.sessionId);
-                    
-                    // Initialize AdMonetizationService with current event metadata
-                    if (_adMonetizationService != null && !_adMonetizationService.IsInitialized())
-                    {
-                        EventMetadata metadata = new EventMetadata();
-                        metadata.PopulateDeviceInfo();
-                        metadata.sessionNum = _sessionNumber;
-                        if (_config.enableGeoTracking && _cachedGeoData != null)
-                        {
-                            metadata.country = _cachedGeoData.country;
-                            metadata.countryCode = _cachedGeoData.countryCode;
-                            metadata.region = _cachedGeoData.region;
-                            metadata.city = _cachedGeoData.city;
-                            metadata.latitude = _cachedGeoData.latitude;
-                            metadata.longitude = _cachedGeoData.longitude;
-                            metadata.timezone = _cachedGeoData.timezone;
-                        }
-                        _adMonetizationService.Initialize(_httpClient, metadata);
-                    }
                     
                     // Start heartbeat coroutine
                     StartHeartbeat();
