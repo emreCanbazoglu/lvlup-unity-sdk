@@ -53,6 +53,9 @@ namespace LvlUp
         private float _lastHeartbeatTime;
         private const float HEARTBEAT_INTERVAL = 30f; // Send heartbeat every 30 seconds
         
+        // Server limits
+        private const int MAX_BATCH_SIZE = 100; // Maximum events per batch allowed by server
+        
         // Cached geo data
         private GeoData _cachedGeoData;
 
@@ -458,6 +461,8 @@ namespace LvlUp
             #endif
         }
 
+        // RemoteConfig convenience methods removed - use LvlUpSDK.Config.* instead
+
         #endregion
 
         #region Utility Methods
@@ -632,7 +637,17 @@ namespace LvlUp
                 return;
             }
 
-            StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{_currentSession.sessionId}", request, response =>
+            // Double-check _currentSession is not null before capturing sessionId
+            if (_currentSession == null)
+            {
+                callback?.Invoke(new ApiResponse<SessionData> { success = false, error = "No active session" });
+                return;
+            }
+
+            // Capture session ID before async call to avoid race condition
+            string sessionId = _currentSession.sessionId;
+
+            StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{sessionId}", request, response =>
             {
                 if (response.success)
                 {
@@ -640,7 +655,7 @@ namespace LvlUp
                     StopHeartbeat();
                     
                     if (_config.enableDebugLogs)
-                        Debug.Log($"[LvlUp] Session ended: {_currentSession.sessionId}");
+                        Debug.Log($"[LvlUp] Session ended: {sessionId}");
                     _currentSession = null;
                 }
                 else
@@ -737,7 +752,10 @@ namespace LvlUp
             if (_currentSession == null)
                 return;
 
-            string endpoint = $"analytics/sessions/{_currentSession.sessionId}/heartbeat";
+            // Capture session ID before async call to avoid race condition
+            // (_currentSession could become null while the request is in flight)
+            string sessionId = _currentSession.sessionId;
+            string endpoint = $"analytics/sessions/{sessionId}/heartbeat";
             
             // Include countryCode if available from geo-location tracking
             // This updates sessions that started before geo data was resolved
@@ -755,7 +773,7 @@ namespace LvlUp
                     _lastHeartbeatTime = Time.realtimeSinceStartup;
                     
                     if (_config.enableDebugLogs)
-                        Debug.Log($"[LvlUp] Heartbeat sent for session: {_currentSession.sessionId}");
+                        Debug.Log($"[LvlUp] Heartbeat sent for session: {sessionId}");
                 }
                 else
                 {
@@ -999,6 +1017,17 @@ namespace LvlUp
                 return;
             }
 
+            // Split into batches if we have more than MAX_BATCH_SIZE events
+            // This prevents "Batch size exceeds maximum limit" errors from server
+            if (_eventBatch.Count > MAX_BATCH_SIZE)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Splitting {_eventBatch.Count} events into multiple batches of {MAX_BATCH_SIZE}");
+                
+                StartCoroutine(FlushInBatchesCoroutine(callback));
+                return;
+            }
+
             var eventsToSend = new List<LvlUpEvent>(_eventBatch);
             // Don't clear yet - wait for confirmation
             _isSendingEvents = true;
@@ -1032,6 +1061,81 @@ namespace LvlUp
                 
                 callback?.Invoke(response);
             });
+        }
+
+        /// <summary>
+        /// Flush events in multiple batches to respect server limits
+        /// </summary>
+        private IEnumerator FlushInBatchesCoroutine(Action<ApiResponse> callback)
+        {
+            _isSendingEvents = true;
+            int totalSent = 0;
+            bool allSucceeded = true;
+            string lastError = null;
+
+            while (_eventBatch.Count > 0 && allSucceeded)
+            {
+                // Take up to MAX_BATCH_SIZE events
+                int batchSize = Mathf.Min(_eventBatch.Count, MAX_BATCH_SIZE);
+                var eventsToSend = _eventBatch.GetRange(0, batchSize);
+                
+                bool batchComplete = false;
+                bool batchSuccess = false;
+
+                TrackEventsBatch(eventsToSend, response =>
+                {
+                    batchSuccess = response.success;
+                    lastError = response.error;
+                    batchComplete = true;
+                    
+                    if (response.success)
+                    {
+                        // Remove sent events
+                        for (int i = 0; i < eventsToSend.Count && _eventBatch.Count > 0; i++)
+                        {
+                            _eventBatch.RemoveAt(0);
+                        }
+                        totalSent += eventsToSend.Count;
+                        
+                        if (_config.enableDebugLogs)
+                            Debug.Log($"[LvlUp] Batch sent: {eventsToSend.Count} events ({totalSent} total)");
+                    }
+                });
+
+                // Wait for batch to complete
+                yield return new WaitUntil(() => batchComplete);
+
+                if (!batchSuccess)
+                {
+                    allSucceeded = false;
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Batch failed: {lastError}. Stopping flush.");
+                    
+                    // Persist remaining events
+                    PersistEvents();
+                }
+
+                // Small delay between batches to avoid overwhelming server
+                if (_eventBatch.Count > 0 && allSucceeded)
+                {
+                    yield return new WaitForSeconds(0.5f);
+                }
+            }
+
+            _isSendingEvents = false;
+            _lastFlushTime = Time.time;
+
+            if (allSucceeded)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Successfully sent all {totalSent} events in multiple batches");
+                
+                callback?.Invoke(new ApiResponse { success = true, message = $"Sent {totalSent} events" });
+            }
+            else
+            {
+                callback?.Invoke(new ApiResponse { success = false, error = lastError });
+            }
         }
 
         private IEnumerator AutoFlushCoroutine()
@@ -1249,53 +1353,14 @@ namespace LvlUp
             return _config;
         }
 
-        #endregion
-
-        #region Crash Reporting
-
         /// <summary>
-        /// Add a breadcrumb to track user actions
+        /// Get crash reporter (for internal SDK use)
         /// </summary>
-        public static void AddBreadcrumb(string message, BreadcrumbType type = BreadcrumbType.Navigation, Dictionary<string, object> data = null)
+        internal CrashReporter GetCrashReporter()
         {
-            if (_instance?._crashReporter != null)
-            {
-                _instance._crashReporter.AddBreadcrumb(message, type, data);
-            }
+            return _crashReporter;
         }
 
-        /// <summary>
-        /// Report an exception manually
-        /// </summary>
-        public static void ReportException(Exception exception, string context = null, Dictionary<string, object> customData = null)
-        {
-            if (_instance?._crashReporter != null)
-            {
-                _instance._crashReporter.ReportException(exception, context, customData);
-            }
-        }
-
-        /// <summary>
-        /// Report an error manually
-        /// </summary>
-        public static void ReportError(string message, string stackTrace = null, Dictionary<string, object> customData = null)
-        {
-            if (_instance?._crashReporter != null)
-            {
-                _instance._crashReporter.ReportError(message, stackTrace, customData);
-            }
-        }
-
-        /// <summary>
-        /// Enable or disable crash reporting
-        /// </summary>
-        public static void SetCrashReportingEnabled(bool enabled)
-        {
-            if (_instance?._crashReporter != null)
-            {
-                _instance._crashReporter.SetEnabled(enabled);
-            }
-        }
 
         #endregion
 
