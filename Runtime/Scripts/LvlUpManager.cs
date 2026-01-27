@@ -307,35 +307,6 @@ namespace LvlUp
         /// </summary>
         public static RemoteConfigService RemoteConfig => _instance?._remoteConfigService;
 
-        /// <summary>
-        /// Fetch remote configs from backend (called automatically after geo data fetch)
-        /// </summary>
-        private void FetchRemoteConfigs()
-        {
-            if (_remoteConfigService == null || !_remoteConfigService.IsInitialized)
-            {
-                if (_config.enableDebugLogs)
-                    Debug.LogWarning("[LvlUp] Remote Config Service not initialized.");
-                return;
-            }
-
-            _remoteConfigService.FetchAsync(this, success =>
-            {
-                if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Remote configs fetched: {success}");
-            });
-        }
-
-        /// <summary>
-        /// Set context for Remote Config rule evaluation
-        /// </summary>
-        public static void SetRemoteConfigContext(string platform = null, string version = null, string country = null, string segment = null)
-        {
-            if (_instance?._remoteConfigService != null && _instance._remoteConfigService.IsInitialized)
-            {
-                _instance._remoteConfigService.SetContext(platform, version, country, segment);
-            }
-        }
 
         /// <summary>
         /// Get current Remote Config environment
