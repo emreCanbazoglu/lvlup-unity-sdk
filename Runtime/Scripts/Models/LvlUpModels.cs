@@ -217,9 +217,9 @@ namespace LvlUp.Models
             try
             {
 #if UNITY_ANDROID
-                this.appBuild = UnityEngine.PlayerSettings.Android.bundleVersionCode.ToString();
+                this.appBuild = UnityEditor.PlayerSettings.Android.bundleVersionCode.ToString();
 #elif UNITY_IOS
-                this.appBuild = UnityEngine.PlayerSettings.iOS.buildNumber;
+                this.appBuild = UnityEditor.PlayerSettings.iOS.buildNumber;
 #else
                 this.appBuild = "1"; // Default for editor
 #endif
