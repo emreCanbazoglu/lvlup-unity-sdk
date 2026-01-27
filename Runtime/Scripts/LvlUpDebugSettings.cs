@@ -1,27 +1,28 @@
 using UnityEngine;
 
-namespace LvlUp.Utils
+namespace LvlUp
 {
     /// <summary>
-    /// Debug settings for LvlUp SDK - used for testing environment and platform overrides
-    /// Persists settings using EditorPrefs (editor) or PlayerPrefs (runtime/mobile builds)
+    /// Debug settings for LvlUp SDK - used for testing
+    /// Persists across Editor and builds using PlayerPrefs
     /// </summary>
     public static class LvlUpDebugSettings
     {
         private const string PLATFORM_OVERRIDE_KEY = "LvlUp.Debug.PlatformOverride";
         private const string ENVIRONMENT_OVERRIDE_KEY = "LvlUp.Debug.EnvironmentOverride";
 
+        #region Platform Override
+
         /// <summary>
         /// Override the platform reported by the SDK
         /// Valid values: null, "ios", "android", "webgl", "windows", "macos", "linux"
+        /// Persists in Editor and builds via PlayerPrefs
         /// </summary>
         public static string PlatformOverride
         {
             get
             {
-
-                var value = PlayerPrefs.GetString(PLATFORM_OVERRIDE_KEY, "");
-                return string.IsNullOrEmpty(value) ? null : value;
+                return PlayerPrefs.GetString(PLATFORM_OVERRIDE_KEY, null);
             }
             set
             {
@@ -38,15 +39,33 @@ namespace LvlUp.Utils
         }
 
         /// <summary>
+        /// Check if platform override is active
+        /// </summary>
+        public static bool HasPlatformOverride => !string.IsNullOrEmpty(PlatformOverride);
+
+        /// <summary>
+        /// Clear platform override
+        /// </summary>
+        public static void ClearPlatformOverride()
+        {
+            PlayerPrefs.DeleteKey(PLATFORM_OVERRIDE_KEY);
+            PlayerPrefs.Save();
+        }
+
+        #endregion
+
+        #region Environment Override
+
+        /// <summary>
         /// Override the remote config environment
         /// Valid values: null, "production", "staging", "development"
+        /// Persists in Editor and builds via PlayerPrefs
         /// </summary>
         public static string EnvironmentOverride
         {
             get
             {
-                var value = PlayerPrefs.GetString(ENVIRONMENT_OVERRIDE_KEY, "");
-                return string.IsNullOrEmpty(value) ? null : value;
+                return PlayerPrefs.GetString(ENVIRONMENT_OVERRIDE_KEY, null);
             }
             set
             {
@@ -63,23 +82,9 @@ namespace LvlUp.Utils
         }
 
         /// <summary>
-        /// Check if platform override is active
-        /// </summary>
-        public static bool HasPlatformOverride => !string.IsNullOrEmpty(PlatformOverride);
-
-        /// <summary>
         /// Check if environment override is active
         /// </summary>
         public static bool HasEnvironmentOverride => !string.IsNullOrEmpty(EnvironmentOverride);
-
-        /// <summary>
-        /// Clear platform override
-        /// </summary>
-        public static void ClearPlatformOverride()
-        {
-            PlayerPrefs.DeleteKey(PLATFORM_OVERRIDE_KEY);
-            PlayerPrefs.Save();
-        }
 
         /// <summary>
         /// Clear environment override
@@ -89,6 +94,23 @@ namespace LvlUp.Utils
             PlayerPrefs.DeleteKey(ENVIRONMENT_OVERRIDE_KEY);
             PlayerPrefs.Save();
         }
+
+        #endregion
+
+        /// <summary>
+        /// Clear all debug overrides
+        /// </summary>
+        public static void ClearAll()
+        {
+            ClearPlatformOverride();
+            ClearEnvironmentOverride();
+        }
     }
 }
+
+
+
+
+
+
 

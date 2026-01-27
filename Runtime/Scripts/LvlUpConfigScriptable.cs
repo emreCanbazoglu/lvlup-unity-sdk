@@ -61,7 +61,7 @@ namespace LvlUp
 
         [Header("Features")]
         [Tooltip("Enable automatic geographic location tracking using IP geolocation")]
-        public bool enableGeoTracking = false;
+        public bool enableGeoTracking = true;
 
         [Tooltip("Track Unity scenes automatically")]
         public bool autoTrackScenes = false;

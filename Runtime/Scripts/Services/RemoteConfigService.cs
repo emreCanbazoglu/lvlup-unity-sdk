@@ -3,9 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using LvlUp.RemoteConfig;
-using LvlUp.Models;
+using LvlUp;
 using LvlUp.Utils;
-
 namespace LvlUp.Services
 {
     /// <summary>
@@ -145,7 +144,14 @@ namespace LvlUp.Services
                 bool fetchComplete = false;
 
                 // Build endpoint with query parameters for context
-                string endpoint = $"config/configs?environment={_currentEnvironment}";
+                // Check for environment override first (works in editor and builds)
+                string environmentToUse = _currentEnvironment;
+                if (LvlUpDebugSettings.HasEnvironmentOverride)
+                {
+                    environmentToUse = LvlUpDebugSettings.EnvironmentOverride;
+                }
+                
+                string endpoint = $"config/configs?environment={environmentToUse}";
                 
                 // Use platform override if set (for editor testing), otherwise use context platform
                 string platformToUse = _contextPlatform;
@@ -482,6 +488,11 @@ namespace LvlUp.Services
         /// </summary>
         public string GetCurrentEnvironment()
         {
+            // Check for override first (from debug settings)
+            if (!string.IsNullOrEmpty(LvlUpDebugSettings.EnvironmentOverride))
+            {
+                return LvlUpDebugSettings.EnvironmentOverride;
+            }
             return _currentEnvironment;
         }
 

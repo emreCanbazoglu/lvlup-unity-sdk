@@ -2,9 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.Linq;
 using LvlUp.RemoteConfig;
-using LvlUp.Utils;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace LvlUp.Editor
 {
@@ -40,6 +38,16 @@ namespace LvlUp.Editor
         private void OnEnable()
         {
             LoadConfig();
+            
+            // Load environment override if set
+            if (!string.IsNullOrEmpty(LvlUpDebugSettings.EnvironmentOverride))
+            {
+                _selectedEnvironment = LvlUpDebugSettings.EnvironmentOverride;
+            }
+            else if (_config != null)
+            {
+                _selectedEnvironment = _config.remoteConfigEnvironment;
+            }
             
             // Load platform override if set
             if (LvlUpDebugSettings.HasPlatformOverride)
@@ -272,11 +280,43 @@ namespace LvlUp.Editor
                     _config.remoteConfigEnvironment = _selectedEnvironment;
                     EditorUtility.SetDirty(_config);
                     AssetDatabase.SaveAssets();
+                    
+                    // Also save to LvlUpDebugSettings so SR Debugger can access it
+                    LvlUpDebugSettings.EnvironmentOverride = _selectedEnvironment;
+                    
                     EditorUtility.DisplayDialog("Environment Changed", 
                         $"Environment changed to: {_selectedEnvironment}\n\nEnter Play mode to use the new environment.", 
                         "OK");
                     Debug.Log($"[LvlUp Debug] Environment changed to: {_selectedEnvironment}. Enter Play mode to apply changes.");
                 }
+            }
+            
+            EditorGUILayout.Space(5);
+            EditorGUILayout.BeginHorizontal();
+            
+            if (GUILayout.Button("Reset to Default"))
+            {
+                _selectedEnvironment = _config != null ? _config.remoteConfigEnvironment : "production";
+                LvlUpDebugSettings.ClearEnvironmentOverride();
+                EditorUtility.DisplayDialog("Environment Reset", 
+                    "Environment override cleared. Using config default.\n\nEnter Play mode to apply changes.", 
+                    "OK");
+                Debug.Log($"[LvlUp Debug] Environment override cleared. Using default from config.");
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            // Show current override if set
+            if (!string.IsNullOrEmpty(LvlUpDebugSettings.EnvironmentOverride))
+            {
+                EditorGUILayout.Space(5);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label("Current Override:", _labelStyle, GUILayout.Width(120));
+                GUIStyle activeStyle = new GUIStyle(EditorStyles.label);
+                activeStyle.normal.textColor = Color.cyan;
+                activeStyle.fontStyle = FontStyle.Bold;
+                GUILayout.Label(LvlUpDebugSettings.EnvironmentOverride.ToUpper(), activeStyle);
+                EditorGUILayout.EndHorizontal();
             }
 
             EditorGUILayout.EndVertical();
