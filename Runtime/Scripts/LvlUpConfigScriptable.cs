@@ -3,17 +3,30 @@ using UnityEngine;
 namespace LvlUp
 {
     /// <summary>
+    /// Environment enum for API endpoint selection
+    /// </summary>
+    public enum ApiEnvironment
+    {
+        Production,
+        Development
+    }
+
+    /// <summary>
     /// Scriptable Object wrapper for LvlUpConfig
     /// Allows configuration to be set in the Inspector
     /// </summary>
     public class LvlUpConfigScriptable : ScriptableObject
     {
+        // API endpoint URLs for each environment
+        private const string PRODUCTION_URL = "https://lvlup-backend-production.up.railway.app/api";
+        private const string DEVELOPMENT_URL = "http://localhost:3000/api";
+
         [Header("API Configuration")]
         [Tooltip("Your LvlUp API Key")]
         public string apiKey = "";
 
-        [Tooltip("Backend API URL (e.g., https://api.lvlup.com)")]
-        public string baseUrl = "";
+        [Tooltip("Select the API environment (Production or Development)")]
+        public ApiEnvironment apiEnvironment = ApiEnvironment.Production;
 
         [Header("Debug & Logging")]
         public bool enableDebugLogs = false;
@@ -92,11 +105,11 @@ namespace LvlUp
         }
 
         /// <summary>
-        /// Get Base URL from config
+        /// Get Base URL from config based on selected environment
         /// </summary>
         public string GetBaseUrl()
         {
-            return baseUrl;
+            return apiEnvironment == ApiEnvironment.Production ? PRODUCTION_URL : DEVELOPMENT_URL;
         }
 
         /// <summary>
@@ -104,7 +117,7 @@ namespace LvlUp
         /// </summary>
         public bool IsValid()
         {
-            return !string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(baseUrl);
+            return !string.IsNullOrEmpty(apiKey);
         }
     }
 }

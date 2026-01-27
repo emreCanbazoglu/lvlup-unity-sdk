@@ -220,7 +220,7 @@ namespace LvlUp.Editor
             // Base URL
             EditorGUILayout.BeginHorizontal();
             GUILayout.Label("Base URL:", _labelStyle, GUILayout.Width(120));
-            GUILayout.Label(string.IsNullOrEmpty(_config.baseUrl) ? "Not Set" : _config.baseUrl, _valueStyle);
+            GUILayout.Label(string.IsNullOrEmpty(_config.GetBaseUrl()) ? "Not Set" : _config.GetBaseUrl(), _valueStyle);
             EditorGUILayout.EndHorizontal();
 
             // Environment
