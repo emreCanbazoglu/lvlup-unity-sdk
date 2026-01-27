@@ -164,9 +164,17 @@ namespace LvlUp
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] SDK Initialized - Base URL: {_baseUrl}");
             
-            // Optionally fetch geo data at initialization (async, non-blocking)
+            // Fetch remote configs - wait for geo if enabled, otherwise start immediately
             if (_config.enableGeoTracking)
+            {
+                // Geo tracking enabled - start geo fetch and remote config will be fetched after
                 StartCoroutine(FetchGeoLocationAsync());
+            }
+            else
+            {
+                // Geo tracking disabled - fetch remote configs immediately
+                StartCoroutine(FetchRemoteConfigsAsync());
+            }
 
             // Start automatic flush coroutine
             if (!_config.sendImmediately)
@@ -380,62 +388,56 @@ namespace LvlUp
             #endif
         }
 
-        /// <summary>
-        /// Auto-set RemoteConfig context from current session data
-        /// Called automatically when initializing remote config
-        /// </summary>
-        private void AutoSetRemoteConfigContext()
-        {
-            if (_remoteConfigService == null || !_remoteConfigService.IsInitialized)
-                return;
-
-            string platform = GetPlatform();
-            string version = Application.version;
-            string country = _cachedGeoData?.countryCode;
-            
-            _remoteConfigService.SetContext(platform, version, country);
-            
-            if (_config.enableDebugLogs)
-                Debug.Log($"[LvlUp] RemoteConfig context set: platform={platform}, version={version}, country={country}");
-        }
 
         /// <summary>
-        /// Initialize and fetch remote configs (called after geo data is fetched)
-        /// Independent from session lifecycle
+        /// Fetch remote configs asynchronously
+        /// Sets context with geo data if available
         /// </summary>
-        private void InitializeAndFetchRemoteConfig()
+        private IEnumerator FetchRemoteConfigsAsync()
         {
             if (!_isInitialized)
-                return;
+                yield break;
 
-            try
+            // Force production environment in builds
+            #if !UNITY_EDITOR
+            _config.remoteConfigEnvironment = "production";
+            #endif
+
+            // Set platform context (always available)
+            string platform = GetPlatform();
+            string version = Application.version;
+            string country = _cachedGeoData?.countryCode; // Will be null if geo tracking is disabled or not yet fetched
+
+            _remoteConfigService.SetContext(
+                platform: platform,
+                version: version,
+                country: country
+            );
+
+            // Fetch remote configs from backend
+            bool fetchComplete = false;
+            _remoteConfigService.FetchAsync(this, success =>
             {
-                // Force production environment in builds
-                #if !UNITY_EDITOR
-                _config.remoteConfigEnvironment = "production";
-                #endif
-
-                // Initialize RemoteConfig service
-                _remoteConfigService.Initialize(
-                    _httpClient,
-                    _config.remoteConfigEnvironment,
-                    _config.enableDebugLogs
-                );
-
-                // Set context with current platform, version, and country
-                AutoSetRemoteConfigContext();
-
-                // Fetch remote configs from backend
-                FetchRemoteConfigs();
-
+                fetchComplete = true;
                 if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] RemoteConfig initialized (environment: {_config.remoteConfigEnvironment}) and fetching configs...");
-            }
-            catch (Exception e)
+                {
+                    if (success)
+                        Debug.Log($"[LvlUp] Remote configs fetched successfully");
+                    else
+                        Debug.LogWarning($"[LvlUp] Failed to fetch remote configs");
+                }
+            });
+
+            // Wait for fetch to complete (with timeout)
+            float timeout = 10f;
+            float startTime = Time.time;
+            while (!fetchComplete && (Time.time - startTime) < timeout)
             {
-                if (_config.enableDebugLogs)
-                    Debug.LogError($"[LvlUp] Failed to initialize RemoteConfig: {e.Message}");
+                yield return null;
             }
+
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] RemoteConfig service ready (environment: {_config.remoteConfigEnvironment}, country: {country ?? "not set"})");
         }
 
         /// <summary>
@@ -788,7 +790,7 @@ namespace LvlUp
 
         /// <summary>
         /// Fetch geographic location data asynchronously
-        /// After successful geo fetch, initialize and fetch remote configs
+        /// After successful geo fetch, fetch remote configs with geo context
         /// </summary>
         private IEnumerator FetchGeoLocationAsync()
         {
@@ -799,16 +801,16 @@ namespace LvlUp
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Geo location fetched: {geoData.city}, {geoData.region}, {geoData.country}");
                     
-                    // After geo data is fetched, initialize and fetch remote configs
-                    InitializeAndFetchRemoteConfig();
+                    // After geo data is fetched, fetch remote configs with geo context
+                    StartCoroutine(FetchRemoteConfigsAsync());
                 },
                 onError: (error) =>
                 {
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to fetch geo location: {error}");
                     
-                    // Still initialize remote config even if geo fetch failed
-                    InitializeAndFetchRemoteConfig();
+                    // Still fetch remote config even if geo fetch failed
+                    StartCoroutine(FetchRemoteConfigsAsync());
                 }
             );
         }
