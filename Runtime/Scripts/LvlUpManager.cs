@@ -82,7 +82,7 @@ namespace LvlUp
 
         /// <summary>
         /// Initialize the LvlUp SDK by automatically loading config from Resources
-        /// Loads LvlUpConfig.asset from Assets/lvlup-unity-sdk/Resources/
+        /// Loads LvlUpConfig.asset from Assets/Resources/
         /// </summary>
         /// <param name="onComplete">Callback when initialization completes</param>
         public static void Initialize(Action<bool, string> onComplete = null)

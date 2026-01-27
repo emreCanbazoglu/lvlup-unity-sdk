@@ -8,7 +8,7 @@ namespace LvlUp.Editor
     /// </summary>
     public class LvlUpMenu
     {
-        private const string CONFIG_FOLDER = "Assets/lvlup-unity-sdk/Resources";
+        private const string CONFIG_FOLDER = "Assets/Resources";
         private const string CONFIG_NAME = "LvlUpConfig";
         private const string CONFIG_PATH = CONFIG_FOLDER + "/" + CONFIG_NAME + ".asset";
 
@@ -18,12 +18,7 @@ namespace LvlUp.Editor
             // Create Resources folder if it doesn't exist
             if (!AssetDatabase.IsValidFolder(CONFIG_FOLDER))
             {
-                string parentFolder = "Assets/lvlup-unity-sdk";
-                if (!AssetDatabase.IsValidFolder(parentFolder))
-                {
-                    AssetDatabase.CreateFolder("Assets", "lvlup-unity-sdk");
-                }
-                AssetDatabase.CreateFolder(parentFolder, "Resources");
+                AssetDatabase.CreateFolder("Assets", "Resources");
             }
 
             // Create or get existing config
