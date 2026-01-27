@@ -26,7 +26,7 @@ namespace LvlUp.Services
         private bool _isEnabled = false;
         private bool _handlersRegistered = false; // Track if handlers are already registered
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
-        private const int MAX_BREADCRUMBS = 50;
+        private const int MAX_BREADCRUMBS = 20;
         private const int MAX_RETRY_ATTEMPTS = 3;
         private bool _isReporting = false; // Prevent recursive crash reporting
 
