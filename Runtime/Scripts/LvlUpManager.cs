@@ -7,6 +7,8 @@ using LvlUp.Services;
 
 namespace LvlUp
 {
+    public delegate void TrackEventDelegate(LvlUpEvent evt, Action<ApiResponse> callback = null);
+
     /// <summary>
     /// Main manager class for LvlUp SDK
     /// Singleton pattern for easy access throughout the application
@@ -27,6 +29,7 @@ namespace LvlUp
                 return _instance;
             }
         }
+        
 
         // Configuration
         private LvlUpConfig _config;
@@ -66,6 +69,11 @@ namespace LvlUp
         private float _lastFlushTime;
         private bool _hasLoadedPersistedEvents = false;
 
+        // Revenue queue for offline support (separate from events)
+        private List<RevenueData> _revenueBatch = new List<RevenueData>();
+        private bool _hasLoadedPersistedRevenue = false;
+        private bool _isSendingRevenue = false;
+
         // State
         private bool _isInitialized = false;
         private bool _isSendingEvents = false;
@@ -74,6 +82,8 @@ namespace LvlUp
         private const string PREF_SESSION_NUMBER = "LvlUp_SessionNumber";
         private const string PREF_OFFLINE_EVENTS = "LvlUp_OfflineEvents";
         private const string PREF_OFFLINE_EVENT_COUNT = "LvlUp_OfflineEventCount";
+        private const string PREF_OFFLINE_REVENUE = "LvlUp_OfflineRevenue";
+        private const string PREF_OFFLINE_REVENUE_COUNT = "LvlUp_OfflineRevenueCount";
         private const string PREF_PENDING_SESSION_STARTS = "LvlUp_PendingSessionStarts";
         private const string PREF_PENDING_SESSION_START_COUNT = "LvlUp_PendingSessionStartCount";
         private const string PREF_PENDING_SESSION_ENDS = "LvlUp_PendingSessionEnds";
@@ -144,7 +154,7 @@ namespace LvlUp
             
             // Initialize Remote Config Service with environment from config
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
-            _adMonetizationService.Initialize(_httpClient, this );
+            _adMonetizationService.Initialize(TrackAdImpression);
             
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] Remote Config initialized with environment: {remoteConfigEnvironment}");
@@ -160,6 +170,9 @@ namespace LvlUp
 
             // Load persisted offline events from previous session
             LoadPersistedEvents();
+            
+            // Load persisted offline revenue from previous session
+            LoadPersistedRevenue();
             
             // Load pending sessions from previous session
             LoadPendingSessions();
@@ -314,18 +327,17 @@ namespace LvlUp
                 // Persist events before quitting
                 PersistEvents();
                 
+                // Persist revenue before quitting
+                if (_revenueBatch.Count > 0)
+                {
+                    PersistRevenue(_revenueBatch);
+                }
+                
                 FlushEventQueue();
+                FlushRevenueQueue();
                 
                 // Don't explicitly end session here - let heartbeat timeout handle it
-                // This prevents race conditions where:
-                // 1. EndSession is called
-                // 2. But heartbeats continue for a few more seconds
-                // 3. Creating inconsistent data (endTime set but lastHeartbeat continues)
-                //
-                // Instead:
-                // - Heartbeats stop naturally when app quits
-                // - Backend auto-closes session after 3 min timeout
-                // - Duration is calculated from lastHeartbeat
+                // ...existing code...
                 
                 StopHeartbeat();
             }
@@ -463,6 +475,40 @@ namespace LvlUp
             #else
                 return "Unknown";
             #endif
+        }
+
+        /// <summary>
+        /// Get current platform as string (alias for revenue tracking)
+        /// </summary>
+        private string GetPlatformString()
+        {
+            return GetPlatform();
+        }
+
+        /// <summary>
+        /// Get device manufacturer
+        /// </summary>
+        private string GetManufacturer()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (AndroidJavaClass buildClass = new AndroidJavaClass("android.os.Build"))
+                {
+                    return buildClass.GetStatic<string>("MANUFACTURER");
+                }
+            }
+            catch
+            {
+                return "Unknown";
+            }
+#elif UNITY_IOS && !UNITY_EDITOR
+            return "Apple";
+#elif UNITY_EDITOR
+            return "Editor";
+#else
+            return "Unknown";
+#endif
         }
 
         // RemoteConfig convenience methods removed - use LvlUpSDK.Config.* instead
@@ -983,6 +1029,285 @@ namespace LvlUp
             }));
         }
 
+        #endregion
+
+        #region Revenue Tracking
+
+        /// <summary>
+        /// Track revenue (Ad Impression or In-App Purchase)
+        /// Supports offline tracking with automatic persistence
+        /// </summary>
+        public void TrackRevenue(RevenueData revenueData, Action<ApiResponse> callback = null)
+        {
+            if (!_isInitialized)
+            {
+                Debug.LogError("[LvlUp] SDK not initialized. Call Initialize() first.");
+                callback?.Invoke(new ApiResponse { success = false, error = "SDK not initialized" });
+                return;
+            }
+
+            if (revenueData == null)
+            {
+                Debug.LogError("[LvlUp] RevenueData cannot be null");
+                callback?.Invoke(new ApiResponse { success = false, error = "RevenueData cannot be null" });
+                return;
+            }
+
+            // Populate context from current session and metadata
+            PopulateRevenueContext(revenueData);
+
+            // Add to batch
+            _revenueBatch.Add(revenueData);
+
+            if (_config.enableDebugLogs)
+            {
+                string type = revenueData.revenueType == "AD_IMPRESSION" ? "Ad" : "IAP";
+                Debug.Log($"[LvlUp] Revenue queued: {type} ${revenueData.revenue:F4} (Batch: {_revenueBatch.Count})");
+            }
+
+            // Check if we need to flush (use same batch size as events)
+            if (_revenueBatch.Count >= _config.eventBatchSize)
+            {
+                FlushRevenueQueue();
+            }
+
+            callback?.Invoke(new ApiResponse { success = true, message = "Revenue queued" });
+        }
+
+        /// <summary>
+        /// Track an ad impression (convenience method)
+        /// </summary>
+        public void TrackAdImpression(string adNetworkName, string adFormat, double revenue,
+            string adUnitId = null, string placement = null, string creativeId = null)
+        {
+            var revenueData = new RevenueData
+            {
+                revenueType = "AD_IMPRESSION",
+                revenue = revenue,
+                currency = "USD",
+                adNetworkName = adNetworkName,
+                adFormat = adFormat,
+                adUnitId = adUnitId,
+                adPlacement = placement,
+                adCreativeId = creativeId,
+                adImpressionId = Guid.NewGuid().ToString()
+            };
+
+            TrackRevenue(revenueData);
+        }
+
+        /// <summary>
+        /// Track an in-app purchase (convenience method)
+        /// </summary>
+        public void TrackInAppPurchase(string productId, double revenue, string transactionId,
+            string store = null, string productName = null, int quantity = 1, bool isVerified = false)
+        {
+            var revenueData = new RevenueData
+            {
+                revenueType = "IN_APP_PURCHASE",
+                revenue = revenue,
+                currency = "USD",
+                productId = productId,
+                productName = productName,
+                transactionId = transactionId,
+                store = store,
+                quantity = quantity,
+                isVerified = isVerified
+            };
+
+            TrackRevenue(revenueData);
+        }
+
+        /// <summary>
+        /// Populate revenue data with context from current session and device metadata
+        /// </summary>
+        private void PopulateRevenueContext(RevenueData revenueData)
+        {
+            // Add session number
+            if (_sessionNumber > 0)
+                revenueData.sessionNum = _sessionNumber;
+
+            // Apply device metadata (same as events)
+            revenueData.platform = GetPlatformString();
+            revenueData.osVersion = SystemInfo.operatingSystem;
+            revenueData.manufacturer = GetManufacturer();
+            revenueData.device = SystemInfo.deviceModel;
+            revenueData.deviceId = SystemInfo.deviceUniqueIdentifier;
+            revenueData.appVersion = Application.version;
+            revenueData.bundleId = Application.identifier;
+            revenueData.engineVersion = $"unity {Application.unityVersion}";
+            revenueData.sdkVersion = "unity 1.0.0";
+            
+            // Connection type
+            if (Application.internetReachability == NetworkReachability.NotReachable)
+                revenueData.connectionType = "offline";
+            else if (Application.internetReachability == NetworkReachability.ReachableViaCarrierDataNetwork)
+                revenueData.connectionType = "wwan";
+            else if (Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork)
+                revenueData.connectionType = "wifi";
+
+            // Apply geo data if available
+            if (_config.enableGeoTracking && _cachedGeoData != null)
+            {
+                revenueData.country = _cachedGeoData.country;
+                revenueData.countryCode = _cachedGeoData.countryCode;
+                revenueData.region = _cachedGeoData.region;
+                revenueData.city = _cachedGeoData.city;
+                revenueData.latitude = _cachedGeoData.latitude;
+                revenueData.longitude = _cachedGeoData.longitude;
+                revenueData.timezone = _cachedGeoData.timezone;
+            }
+        }
+
+        /// <summary>
+        /// Flush the revenue queue and send to server
+        /// </summary>
+        private void FlushRevenueQueue()
+        {
+            if (_revenueBatch.Count == 0 || _isSendingRevenue)
+                return;
+
+            _isSendingRevenue = true;
+
+            var batchToSend = new List<RevenueData>(_revenueBatch);
+            _revenueBatch.Clear();
+
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Flushing revenue batch: {batchToSend.Count} items");
+
+            StartCoroutine(SendRevenueBatch(batchToSend));
+        }
+
+        private IEnumerator SendRevenueBatch(List<RevenueData> batch)
+        {
+            var request = new
+            {
+                userId = _currentUserId,
+                sessionId = _currentSession?.sessionId,
+                revenueData = batch
+            };
+
+            bool requestComplete = false;
+            bool requestSuccess = false;
+
+            yield return _httpClient.Post<object>("analytics/revenue", request, response =>
+            {
+                requestComplete = true;
+                requestSuccess = response.success;
+
+                if (response.success)
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Revenue batch sent successfully: {batch.Count} items");
+                }
+                else
+                {
+                    Debug.LogWarning($"[LvlUp] Failed to send revenue batch: {response.error}");
+                    
+                    // Re-queue failed events for retry
+                    _revenueBatch.InsertRange(0, batch);
+                    
+                    // Persist to PlayerPrefs for offline support
+                    PersistRevenue(batch);
+                }
+            });
+
+            yield return new WaitUntil(() => requestComplete);
+
+            _isSendingRevenue = false;
+
+            // If there are more items in the batch, flush again
+            if (_revenueBatch.Count >= _config.eventBatchSize)
+            {
+                FlushRevenueQueue();
+            }
+        }
+
+        /// <summary>
+        /// Load persisted revenue from previous session
+        /// </summary>
+        private void LoadPersistedRevenue()
+        {
+            if (_hasLoadedPersistedRevenue)
+                return;
+
+            _hasLoadedPersistedRevenue = true;
+
+            try
+            {
+                int count = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
+                if (count == 0)
+                    return;
+
+                int loadedCount = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    string key = $"{PREF_OFFLINE_REVENUE}_{i}";
+                    if (PlayerPrefs.HasKey(key))
+                    {
+                        string json = PlayerPrefs.GetString(key);
+                        try
+                        {
+                            var revenue = JsonUtility.FromJson<RevenueData>(json);
+                            if (revenue != null)
+                            {
+                                _revenueBatch.Add(revenue);
+                                loadedCount++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[LvlUp] Failed to deserialize revenue {i}: {ex.Message}");
+                        }
+                        
+                        // Clean up this entry
+                        PlayerPrefs.DeleteKey(key);
+                    }
+                }
+
+                // Clean up count
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
+                PlayerPrefs.Save();
+
+                if (loadedCount > 0 && _config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline revenue items");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to load persisted revenue: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist revenue to PlayerPrefs for offline support
+        /// </summary>
+        private void PersistRevenue(List<RevenueData> revenue)
+        {
+            try
+            {
+                int existingCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
+                
+                for (int i = 0; i < revenue.Count; i++)
+                {
+                    string json = JsonUtility.ToJson(revenue[i]);
+                    string key = $"{PREF_OFFLINE_REVENUE}_{existingCount + i}";
+                    PlayerPrefs.SetString(key, json);
+                }
+
+                PlayerPrefs.SetInt(PREF_OFFLINE_REVENUE_COUNT, existingCount + revenue.Count);
+                PlayerPrefs.Save();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Persisted {revenue.Count} revenue items for offline");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to persist revenue: {ex.Message}");
+            }
+        }
+
+        #endregion
+
         private void SendEventImmediately(LvlUpEvent lvlUpEvent, Action<ApiResponse> callback)
         {
             // Send as a single-event batch to ensure all metadata fields are included
@@ -1155,6 +1480,15 @@ namespace LvlUp
                     
                     FlushEventQueue();
                 }
+
+                // Also flush revenue batch
+                if (_revenueBatch.Count > 0 && !_isSendingRevenue)
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Auto-flushing {_revenueBatch.Count} revenue items");
+                    
+                    FlushRevenueQueue();
+                }
             }
         }
 
@@ -1166,7 +1500,13 @@ namespace LvlUp
             return _eventBatch.Count;
         }
 
-        #endregion
+        /// <summary>
+        /// Get the number of queued revenue items
+        /// </summary>
+        public int GetQueuedRevenueCount()
+        {
+            return _revenueBatch.Count;
+        }
 
         #region Player Journey
 
@@ -1270,7 +1610,6 @@ namespace LvlUp
         }
 
         #endregion
-
 
         #region Utility Methods
 

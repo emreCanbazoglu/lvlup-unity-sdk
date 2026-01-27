@@ -11,19 +11,28 @@ namespace LvlUp.Services
     /// </summary>
     public class AdMonetizationService
     {
-        private LvlUpHttpClient _httpClient;
-        private MonoBehaviour _coroutineRunner;
         private bool _isInitialized;
+        
+        private TrackAdImpressionDelegate _trackAdImpressionDelegate;
 
+        /// <summary>
+        /// Delegate for tracking ad impressions
+        /// </summary>
+        public delegate void TrackAdImpressionDelegate(
+            string adNetworkName, 
+            string adFormat, 
+            double revenue,
+            string adUnitId, 
+            string placement, 
+            string creativeId
+        );
 
         /// <summary>
         /// Initialize the ad monetization service
-        /// Also initializes MAX integration if lvlup_max_enabled is defined
         /// </summary>
-        public void Initialize(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner)
+        public void Initialize(TrackAdImpressionDelegate trackAdImpressionDelegate)
         {
-            _httpClient = httpClient;
-            _coroutineRunner = coroutineRunner;
+            _trackAdImpressionDelegate = trackAdImpressionDelegate;
             _isInitialized = true;
             Debug.Log("[LvlUp] AdMonetizationService initialized");
 
@@ -89,51 +98,20 @@ namespace LvlUp.Services
                 return;
             }
 
-            // Create ad impression data
-            AdImpressionData adData = new AdImpressionData
+            // Track via delegate - LvlUpManager will handle context population
+            _trackAdImpressionDelegate?.Invoke(
+                adNetworkName, 
+                adFormat, 
+                revenue,
+                adUnitId, 
+                placement, 
+                creativeId
+            );
+            
+            if (revenue > 0)
             {
-                adNetworkName = adNetworkName,
-                adFormat = adFormat,
-                adUnitId = adUnitId,
-                adUnitName = adUnitName,
-                placement = placement,
-                creativeId = creativeId,
-                revenue = revenue,
-                revenueCurrency = "USD",
-                country = country,
-                impressionId = Guid.NewGuid().ToString(),
-                impressionTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                customData = customData
-            };
-
-            // Create ad monetization event
-            long currentTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            AdMonetizationEvent adEvent = new AdMonetizationEvent
-            {
-                eventType = "ad_impression",
-                adData = adData,
-                metadata = CloneEventMetadata(_currentEventMetadata),
-                timestamp = currentTimestamp
-            };
-
-            // Send event to backend
-            if (_httpClient != null && _coroutineRunner != null)
-            {
-                _coroutineRunner.StartCoroutine(_httpClient.Post<object>("/ad-impressions", adEvent, (response) =>
-                {
-                    if (!response.success)
-                    {
-                        Debug.LogWarning($"[LvlUp] Failed to send ad impression event: {response.error}");
-                    }
-                    else
-                    {
-                        Debug.Log("[LvlUp] Ad impression event sent successfully");
-                    }
-                }));
+                Debug.Log($"[LvlUp] Ad Impression tracked: {adNetworkName} - {adFormat} - ${revenue:F4}");
             }
-
-            Debug.Log($"[LvlUp] Ad Impression Tracked: {adNetworkName} - {adFormat} - ${revenue}");
         }
     }
 }
-
