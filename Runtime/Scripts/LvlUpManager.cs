@@ -34,6 +34,7 @@ namespace LvlUp
         private GeoLocationService _geoService;
         private CrashReporter _crashReporter;
         private RemoteConfigService _remoteConfigService;
+        private AdMonetizationService _adMonetizationService;
         private string _apiKey;
         private string _baseUrl;
 
@@ -139,6 +140,7 @@ namespace LvlUp
             _geoService = new GeoLocationService();
             _crashReporter = new CrashReporter(_httpClient, this, _apiKey, GetCachedGeoData, null, null);
             _remoteConfigService = new RemoteConfigService();
+            _adMonetizationService = new AdMonetizationService();
             
             // Initialize Remote Config Service with environment from config
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
@@ -567,6 +569,25 @@ namespace LvlUp
                     _hasOfflineSession = false;
                     
                     _crashReporter.SetSessionId(_currentSession.sessionId);
+                    
+                    // Initialize AdMonetizationService with current event metadata
+                    if (_adMonetizationService != null && !_adMonetizationService.IsInitialized())
+                    {
+                        EventMetadata metadata = new EventMetadata();
+                        metadata.PopulateDeviceInfo();
+                        metadata.sessionNum = _sessionNumber;
+                        if (_config.enableGeoTracking && _cachedGeoData != null)
+                        {
+                            metadata.country = _cachedGeoData.country;
+                            metadata.countryCode = _cachedGeoData.countryCode;
+                            metadata.region = _cachedGeoData.region;
+                            metadata.city = _cachedGeoData.city;
+                            metadata.latitude = _cachedGeoData.latitude;
+                            metadata.longitude = _cachedGeoData.longitude;
+                            metadata.timezone = _cachedGeoData.timezone;
+                        }
+                        _adMonetizationService.Initialize(_httpClient, metadata);
+                    }
                     
                     // Start heartbeat coroutine
                     StartHeartbeat();
@@ -1736,6 +1757,14 @@ namespace LvlUp
         }
 
         #endregion
+
+        /// <summary>
+        /// Get the AdMonetizationService instance
+        /// </summary>
+        public AdMonetizationService GetAdMonetizationService()
+        {
+            return _adMonetizationService;
+        }
     }
 }
 

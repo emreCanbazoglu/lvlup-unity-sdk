@@ -624,5 +624,39 @@ namespace LvlUp.Models
         public string Type;
         public Dictionary<string, object> Data;
     }
+
+    /// <summary>
+    /// Ad monetization impression data
+    /// Tracks ad impressions and revenue from various ad networks
+    /// </summary>
+    [Serializable]
+    public class AdImpressionData
+    {
+        public string adNetworkName;      // Network name (e.g., "MAX", "AdMob", "IronSource")
+        public string adFormat;           // Ad format (e.g., "BANNER", "INTER", "REWARDED", "MREC", "APPOPEN")
+        public string adUnitId;           // Ad unit identifier
+        public string adUnitName;         // Human-readable ad unit name
+        public string placement;          // Ad placement identifier
+        public string creativeId;         // Creative identifier
+        public double revenue;            // Revenue in USD
+        public string revenueCurrency;    // Currency code (e.g., "USD")
+        public string country;            // Country code where ad was shown
+        public string impressionId;       // Unique impression identifier
+        public long impressionTimestamp;  // Unix timestamp in milliseconds
+        public string customData;         // Optional custom data as JSON string
+    }
+
+    /// <summary>
+    /// Ad monetization event wrapper
+    /// Contains ad impression data along with standard event metadata
+    /// </summary>
+    [Serializable]
+    public class AdMonetizationEvent
+    {
+        public string eventType;          // "ad_impression"
+        public AdImpressionData adData;
+        public EventMetadata metadata;
+        public long timestamp;            // Unix timestamp in milliseconds
+    }
 }
 
