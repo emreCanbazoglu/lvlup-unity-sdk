@@ -5,7 +5,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 using LvlUp.Models;
-using LvlUp.Utils;
+using Newtonsoft.Json;
 
 namespace LvlUp.Services
 {
@@ -56,7 +56,8 @@ namespace LvlUp.Services
         public IEnumerator Post<T>(string endpoint, object body, Action<ApiResponse<T>> callback)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            string jsonBody = SimpleJson.ToJson(body);
+            // Use empty object {} if body is null, instead of "null" string
+            string jsonBody = body == null ? "{}" : JsonConvert.SerializeObject(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] POST {url}\nBody: {jsonBody}");
@@ -83,7 +84,8 @@ namespace LvlUp.Services
         public IEnumerator Put<T>(string endpoint, object body, Action<ApiResponse<T>> callback)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            string jsonBody = SimpleJson.ToJson(body);
+            // Use empty object {} if body is null, instead of "null" string
+            string jsonBody = body == null ? "{}" : JsonConvert.SerializeObject(body);
 
             if (_debugLogs)
                 Debug.Log($"[LvlUp] PUT {url}\nBody: {jsonBody}");
@@ -142,18 +144,30 @@ namespace LvlUp.Services
                     if (_debugLogs)
                         Debug.Log($"[LvlUp] Response: {responseText}");
 
-                    var response = JsonUtility.FromJson<ApiResponse<T>>(responseText);
+                    // Try to deserialize as ApiResponse<T> first
+                    var response = JsonConvert.DeserializeObject<ApiResponse<T>>(responseText);
                     
-                    if (response == null)
+                    // If response is null or data is null, try deserializing directly to T
+                    if (response == null || response.data == null)
                     {
-                        response = new ApiResponse<T>
+                        var directData = JsonConvert.DeserializeObject<T>(responseText);
+                        
+                        if (directData != null)
                         {
-                            success = true,
-                            data = JsonUtility.FromJson<T>(responseText)
-                        };
+                            // Backend returned T directly, wrap it in ApiResponse
+                            response = new ApiResponse<T>
+                            {
+                                success = true,
+                                data = directData
+                            };
+                        }
                     }
 
-                    return response;
+                    return response ?? new ApiResponse<T>
+                    {
+                        success = false,
+                        error = "Failed to deserialize response"
+                    };
                 }
                 catch (Exception ex)
                 {
@@ -170,10 +184,23 @@ namespace LvlUp.Services
                 string errorMsg = $"Request failed: {request.error}";
                 if (!string.IsNullOrEmpty(request.downloadHandler?.text))
                 {
-                    errorMsg += $"\nResponse: {request.downloadHandler.text}";
+                    errorMsg += $" Response: {request.downloadHandler.text}";
                 }
 
-                Debug.LogError($"[LvlUp] {errorMsg}");
+                // Check if this is a network connectivity issue (expected in offline mode)
+                bool isNetworkError = IsNetworkError(request);
+                
+                if (isNetworkError)
+                {
+                    // Network errors are expected when offline - log as warning
+                    if (_debugLogs)
+                        Debug.LogWarning($"[LvlUp] {errorMsg}");
+                }
+                else
+                {
+                    // Server errors (4xx, 5xx) are unexpected - log as error
+                    Debug.LogError($"[LvlUp] {errorMsg}");
+                }
                 
                 return new ApiResponse<T>
                 {
@@ -181,6 +208,27 @@ namespace LvlUp.Services
                     error = errorMsg
                 };
             }
+        }
+
+        /// <summary>
+        /// Check if the error is a network connectivity issue (expected in offline mode)
+        /// </summary>
+        private bool IsNetworkError(UnityWebRequest request)
+        {
+            // Network connectivity errors
+            if (request.result == UnityWebRequest.Result.ConnectionError)
+                return true;
+
+            // Check error message for common network issues
+            string error = request.error?.ToLower() ?? "";
+            
+            return error.Contains("cannot resolve") ||
+                   error.Contains("cannot connect") ||
+                   error.Contains("connection") ||
+                   error.Contains("host") ||
+                   error.Contains("network") ||
+                   error.Contains("timeout") ||
+                   error.Contains("unreachable");
         }
 
         /// <summary>
@@ -197,7 +245,7 @@ namespace LvlUp.Services
                     if (_debugLogs)
                         Debug.Log($"[LvlUp] Response: {responseText}");
 
-                    var response = JsonUtility.FromJson<ApiResponse>(responseText);
+                    var response = JsonConvert.DeserializeObject<ApiResponse>(responseText);
                     return response ?? new ApiResponse { success = true };
                 }
                 catch (Exception ex)
@@ -215,10 +263,23 @@ namespace LvlUp.Services
                 string errorMsg = $"Request failed: {request.error}";
                 if (!string.IsNullOrEmpty(request.downloadHandler?.text))
                 {
-                    errorMsg += $"\nResponse: {request.downloadHandler.text}";
+                    errorMsg += $" Response: {request.downloadHandler.text}";
                 }
 
-                Debug.LogError($"[LvlUp] {errorMsg}");
+                // Check if this is a network connectivity issue (expected in offline mode)
+                bool isNetworkError = IsNetworkError(request);
+                
+                if (isNetworkError)
+                {
+                    // Network errors are expected when offline - log as warning
+                    if (_debugLogs)
+                        Debug.LogWarning($"[LvlUp] {errorMsg}");
+                }
+                else
+                {
+                    // Server errors (4xx, 5xx) are unexpected - log as error
+                    Debug.LogError($"[LvlUp] {errorMsg}");
+                }
                 
                 return new ApiResponse
                 {

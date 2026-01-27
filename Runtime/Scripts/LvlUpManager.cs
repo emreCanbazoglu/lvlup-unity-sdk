@@ -33,6 +33,7 @@ namespace LvlUp
         private LvlUpHttpClient _httpClient;
         private GeoLocationService _geoService;
         private CrashReporter _crashReporter;
+        private RemoteConfigService _remoteConfigService;
         private string _apiKey;
         private string _baseUrl;
 
@@ -51,6 +52,9 @@ namespace LvlUp
         private Coroutine _heartbeatCoroutine;
         private float _lastHeartbeatTime;
         private const float HEARTBEAT_INTERVAL = 30f; // Send heartbeat every 30 seconds
+        
+        // Server limits
+        private const int MAX_BATCH_SIZE = 100; // Maximum events per batch allowed by server
         
         // Cached geo data
         private GeoData _cachedGeoData;
@@ -77,6 +81,36 @@ namespace LvlUp
         #region Initialization
 
         /// <summary>
+        /// Initialize the LvlUp SDK by automatically loading config from Resources
+        /// Loads LvlUpConfig.asset from Assets/lvlup-unity-sdk/Resources/
+        /// </summary>
+        /// <param name="onComplete">Callback when initialization completes</param>
+        public static void Initialize(Action<bool, string> onComplete = null)
+        {
+            LvlUpConfigScriptable configScriptable = Resources.Load<LvlUpConfigScriptable>("LvlUpConfig");
+            
+            if (configScriptable == null)
+            {
+                string error = "[LvlUp] LvlUpConfig scriptable asset not found in Resources/. " +
+                    "Please create one using: Assets > LvlUp > Create Configuration";
+                Debug.LogError(error);
+                onComplete?.Invoke(false, error);
+                return;
+            }
+
+            if (!configScriptable.IsValid())
+            {
+                string error = "[LvlUp] LvlUpConfigScriptable is not valid. API Key and Base URL must be configured.";
+                Debug.LogError(error);
+                onComplete?.Invoke(false, error);
+                return;
+            }
+
+            LvlUpConfig config = configScriptable.ToLvlUpConfig();
+            Instance._Initialize(configScriptable.GetApiKey(), configScriptable.GetBaseUrl(), config, configScriptable.remoteConfigEnvironment, onComplete);
+        }
+
+        /// <summary>
         /// Initialize the LvlUp SDK
         /// </summary>
         /// <param name="apiKey">Your LvlUp API key</param>
@@ -85,10 +119,10 @@ namespace LvlUp
         /// <param name="onComplete">Callback when initialization completes</param>
         public static void Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
         {
-            Instance._Initialize(apiKey, baseUrl, config, onComplete);
+            Instance._Initialize(apiKey, baseUrl, config, "production", onComplete);
         }
 
-        private void _Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, Action<bool, string> onComplete = null)
+        private void _Initialize(string apiKey, string baseUrl, LvlUpConfig config = null, string remoteConfigEnvironment = "production", Action<bool, string> onComplete = null)
         {
             if (_isInitialized)
             {
@@ -104,6 +138,13 @@ namespace LvlUp
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
             _geoService = new GeoLocationService();
             _crashReporter = new CrashReporter(_httpClient, this, _apiKey, GetCachedGeoData, null, null);
+            _remoteConfigService = new RemoteConfigService();
+            
+            // Initialize Remote Config Service with environment from config
+            _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
+            
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Remote Config initialized with environment: {remoteConfigEnvironment}");
             
             // Enable crash reporting by default
             if (_config.enableCrashReporting)
@@ -182,6 +223,15 @@ namespace LvlUp
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            // Clean up singleton reference when destroyed
+            if (_instance == this)
+            {
+                _instance = null;
+            }
         }
 
         private void OnApplicationPause(bool pauseStatus)
@@ -272,6 +322,147 @@ namespace LvlUp
 
         #endregion
 
+        #region Remote Config Service
+
+        /// <summary>
+        /// Access Remote Config Service for config operations
+        /// Automatically initialized after session starts
+        /// </summary>
+        public static RemoteConfigService RemoteConfig => _instance?._remoteConfigService;
+
+        /// <summary>
+        /// Fetch remote configs from backend (called automatically after geo data fetch)
+        /// </summary>
+        private void FetchRemoteConfigs()
+        {
+            if (_remoteConfigService == null || !_remoteConfigService.IsInitialized)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.LogWarning("[LvlUp] Remote Config Service not initialized.");
+                return;
+            }
+
+            _remoteConfigService.FetchAsync(this, success =>
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Remote configs fetched: {success}");
+            });
+        }
+
+        /// <summary>
+        /// Set context for Remote Config rule evaluation
+        /// </summary>
+        public static void SetRemoteConfigContext(string platform = null, string version = null, string country = null, string segment = null)
+        {
+            if (_instance?._remoteConfigService != null && _instance._remoteConfigService.IsInitialized)
+            {
+                _instance._remoteConfigService.SetContext(platform, version, country, segment);
+            }
+        }
+
+        /// <summary>
+        /// Get current Remote Config environment
+        /// </summary>
+        public static string GetRemoteConfigEnvironment()
+        {
+            return _instance?._config?.remoteConfigEnvironment ?? "production";
+        }
+
+        /// <summary>
+        /// Get the actual environment that will be used (always production in builds)
+        /// </summary>
+        public static string GetEffectiveRemoteConfigEnvironment()
+        {
+            #if UNITY_EDITOR
+            return _instance?._config?.remoteConfigEnvironment ?? "production";
+            #else
+            return "production"; // Always production in builds
+            #endif
+        }
+
+        /// <summary>
+        /// Auto-set RemoteConfig context from current session data
+        /// Called automatically when initializing remote config
+        /// </summary>
+        private void AutoSetRemoteConfigContext()
+        {
+            if (_remoteConfigService == null || !_remoteConfigService.IsInitialized)
+                return;
+
+            string platform = GetPlatform();
+            string version = Application.version;
+            string country = _cachedGeoData?.countryCode;
+            
+            _remoteConfigService.SetContext(platform, version, country);
+            
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] RemoteConfig context set: platform={platform}, version={version}, country={country}");
+        }
+
+        /// <summary>
+        /// Initialize and fetch remote configs (called after geo data is fetched)
+        /// Independent from session lifecycle
+        /// </summary>
+        private void InitializeAndFetchRemoteConfig()
+        {
+            if (!_isInitialized)
+                return;
+
+            try
+            {
+                // Force production environment in builds
+                #if !UNITY_EDITOR
+                _config.remoteConfigEnvironment = "production";
+                #endif
+
+                // Initialize RemoteConfig service
+                _remoteConfigService.Initialize(
+                    _httpClient,
+                    _config.remoteConfigEnvironment,
+                    _config.enableDebugLogs
+                );
+
+                // Set context with current platform, version, and country
+                AutoSetRemoteConfigContext();
+
+                // Fetch remote configs from backend
+                FetchRemoteConfigs();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] RemoteConfig initialized (environment: {_config.remoteConfigEnvironment}) and fetching configs...");
+            }
+            catch (Exception e)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.LogError($"[LvlUp] Failed to initialize RemoteConfig: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get current platform as string
+        /// </summary>
+        private string GetPlatform()
+        {
+            #if UNITY_IOS
+                return "iOS";
+            #elif UNITY_ANDROID
+                return "Android";
+            #elif UNITY_WEBGL
+                return "WebGL";
+            #elif UNITY_STANDALONE_WIN
+                return "Windows";
+            #elif UNITY_STANDALONE_OSX
+                return "macOS";
+            #elif UNITY_STANDALONE_LINUX
+                return "Linux";
+            #else
+                return "Unknown";
+            #endif
+        }
+
+        // RemoteConfig convenience methods removed - use LvlUpSDK.Config.* instead
+
+        #endregion
 
         #region Utility Methods
 
@@ -445,7 +636,17 @@ namespace LvlUp
                 return;
             }
 
-            StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{_currentSession.sessionId}", request, response =>
+            // Double-check _currentSession is not null before capturing sessionId
+            if (_currentSession == null)
+            {
+                callback?.Invoke(new ApiResponse<SessionData> { success = false, error = "No active session" });
+                return;
+            }
+
+            // Capture session ID before async call to avoid race condition
+            string sessionId = _currentSession.sessionId;
+
+            StartCoroutine(_httpClient.Put<SessionData>($"analytics/sessions/{sessionId}", request, response =>
             {
                 if (response.success)
                 {
@@ -453,7 +654,7 @@ namespace LvlUp
                     StopHeartbeat();
                     
                     if (_config.enableDebugLogs)
-                        Debug.Log($"[LvlUp] Session ended: {_currentSession.sessionId}");
+                        Debug.Log($"[LvlUp] Session ended: {sessionId}");
                     _currentSession = null;
                 }
                 else
@@ -550,7 +751,10 @@ namespace LvlUp
             if (_currentSession == null)
                 return;
 
-            string endpoint = $"analytics/sessions/{_currentSession.sessionId}/heartbeat";
+            // Capture session ID before async call to avoid race condition
+            // (_currentSession could become null while the request is in flight)
+            string sessionId = _currentSession.sessionId;
+            string endpoint = $"analytics/sessions/{sessionId}/heartbeat";
             
             // Include countryCode if available from geo-location tracking
             // This updates sessions that started before geo data was resolved
@@ -568,7 +772,7 @@ namespace LvlUp
                     _lastHeartbeatTime = Time.realtimeSinceStartup;
                     
                     if (_config.enableDebugLogs)
-                        Debug.Log($"[LvlUp] Heartbeat sent for session: {_currentSession.sessionId}");
+                        Debug.Log($"[LvlUp] Heartbeat sent for session: {sessionId}");
                 }
                 else
                 {
@@ -584,6 +788,7 @@ namespace LvlUp
 
         /// <summary>
         /// Fetch geographic location data asynchronously
+        /// After successful geo fetch, initialize and fetch remote configs
         /// </summary>
         private IEnumerator FetchGeoLocationAsync()
         {
@@ -593,11 +798,17 @@ namespace LvlUp
                     _cachedGeoData = geoData;
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Geo location fetched: {geoData.city}, {geoData.region}, {geoData.country}");
+                    
+                    // After geo data is fetched, initialize and fetch remote configs
+                    InitializeAndFetchRemoteConfig();
                 },
                 onError: (error) =>
                 {
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to fetch geo location: {error}");
+                    
+                    // Still initialize remote config even if geo fetch failed
+                    InitializeAndFetchRemoteConfig();
                 }
             );
         }
@@ -805,6 +1016,17 @@ namespace LvlUp
                 return;
             }
 
+            // Split into batches if we have more than MAX_BATCH_SIZE events
+            // This prevents "Batch size exceeds maximum limit" errors from server
+            if (_eventBatch.Count > MAX_BATCH_SIZE)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Splitting {_eventBatch.Count} events into multiple batches of {MAX_BATCH_SIZE}");
+                
+                StartCoroutine(FlushInBatchesCoroutine(callback));
+                return;
+            }
+
             var eventsToSend = new List<LvlUpEvent>(_eventBatch);
             // Don't clear yet - wait for confirmation
             _isSendingEvents = true;
@@ -838,6 +1060,81 @@ namespace LvlUp
                 
                 callback?.Invoke(response);
             });
+        }
+
+        /// <summary>
+        /// Flush events in multiple batches to respect server limits
+        /// </summary>
+        private IEnumerator FlushInBatchesCoroutine(Action<ApiResponse> callback)
+        {
+            _isSendingEvents = true;
+            int totalSent = 0;
+            bool allSucceeded = true;
+            string lastError = null;
+
+            while (_eventBatch.Count > 0 && allSucceeded)
+            {
+                // Take up to MAX_BATCH_SIZE events
+                int batchSize = Mathf.Min(_eventBatch.Count, MAX_BATCH_SIZE);
+                var eventsToSend = _eventBatch.GetRange(0, batchSize);
+                
+                bool batchComplete = false;
+                bool batchSuccess = false;
+
+                TrackEventsBatch(eventsToSend, response =>
+                {
+                    batchSuccess = response.success;
+                    lastError = response.error;
+                    batchComplete = true;
+                    
+                    if (response.success)
+                    {
+                        // Remove sent events
+                        for (int i = 0; i < eventsToSend.Count && _eventBatch.Count > 0; i++)
+                        {
+                            _eventBatch.RemoveAt(0);
+                        }
+                        totalSent += eventsToSend.Count;
+                        
+                        if (_config.enableDebugLogs)
+                            Debug.Log($"[LvlUp] Batch sent: {eventsToSend.Count} events ({totalSent} total)");
+                    }
+                });
+
+                // Wait for batch to complete
+                yield return new WaitUntil(() => batchComplete);
+
+                if (!batchSuccess)
+                {
+                    allSucceeded = false;
+                    if (_config.enableDebugLogs)
+                        Debug.LogWarning($"[LvlUp] Batch failed: {lastError}. Stopping flush.");
+                    
+                    // Persist remaining events
+                    PersistEvents();
+                }
+
+                // Small delay between batches to avoid overwhelming server
+                if (_eventBatch.Count > 0 && allSucceeded)
+                {
+                    yield return new WaitForSeconds(0.5f);
+                }
+            }
+
+            _isSendingEvents = false;
+            _lastFlushTime = Time.time;
+
+            if (allSucceeded)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Successfully sent all {totalSent} events in multiple batches");
+                
+                callback?.Invoke(new ApiResponse { success = true, message = $"Sent {totalSent} events" });
+            }
+            else
+            {
+                callback?.Invoke(new ApiResponse { success = false, error = lastError });
+            }
         }
 
         private IEnumerator AutoFlushCoroutine()
@@ -1023,53 +1320,46 @@ namespace LvlUp
             return userId;
         }
 
-        #endregion
-
-        #region Crash Reporting
-
         /// <summary>
-        /// Add a breadcrumb to track user actions
+        /// Get API Key (for debug purposes)
         /// </summary>
-        public static void AddBreadcrumb(string message, BreadcrumbType type = BreadcrumbType.Navigation, Dictionary<string, object> data = null)
+        public string GetApiKey()
         {
-            if (Instance._crashReporter != null)
-            {
-                Instance._crashReporter.AddBreadcrumb(message, type, data);
-            }
+            return _apiKey;
         }
 
         /// <summary>
-        /// Report an exception manually
+        /// Get Base URL (for debug purposes)
         /// </summary>
-        public static void ReportException(Exception exception, string context = null, Dictionary<string, object> customData = null)
+        public string GetBaseUrl()
         {
-            if (Instance._crashReporter != null)
-            {
-                Instance._crashReporter.ReportException(exception, context, customData);
-            }
+            return _baseUrl;
         }
 
         /// <summary>
-        /// Report an error manually
+        /// Get Remote Config Service (for debug purposes)
         /// </summary>
-        public static void ReportError(string message, string stackTrace = null, Dictionary<string, object> customData = null)
+        public RemoteConfigService GetRemoteConfigService()
         {
-            if (Instance._crashReporter != null)
-            {
-                Instance._crashReporter.ReportError(message, stackTrace, customData);
-            }
+            return _remoteConfigService;
         }
 
         /// <summary>
-        /// Enable or disable crash reporting
+        /// Get current config (for debug purposes)
         /// </summary>
-        public static void SetCrashReportingEnabled(bool enabled)
+        public LvlUpConfig GetConfig()
         {
-            if (Instance._crashReporter != null)
-            {
-                Instance._crashReporter.SetEnabled(enabled);
-            }
+            return _config;
         }
+
+        /// <summary>
+        /// Get crash reporter (for internal SDK use)
+        /// </summary>
+        internal CrashReporter GetCrashReporter()
+        {
+            return _crashReporter;
+        }
+
 
         #endregion
 

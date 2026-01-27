@@ -192,7 +192,7 @@ namespace LvlUp.Services
             {
                 var report = new Models.CrashReport
                 {
-                    GameId = _apiKey,
+                    ApiKey = _apiKey,
                     UserId = _userId,
                     SessionId = _sessionId,
                     CrashType = crashType,

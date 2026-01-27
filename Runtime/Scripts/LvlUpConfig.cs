@@ -84,6 +84,8 @@ namespace LvlUp
         /// Incremented when changes are made to the level funnel
         /// </summary>
         public int levelFunnelVersion = 1;
+        
+        public string remoteConfigEnvironment = "production";
     }
 }
 

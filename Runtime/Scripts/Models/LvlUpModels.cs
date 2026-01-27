@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using LvlUp.Utils;
 
 namespace LvlUp.Models
 {
@@ -129,7 +130,15 @@ namespace LvlUp.Models
         public void PopulateDeviceInfo()
         {
 #if UNITY_EDITOR
-            this.platform = "editor";
+            // Check for platform override in editor
+            if (LvlUpDebugSettings.HasPlatformOverride)
+            {
+                this.platform = LvlUpDebugSettings.PlatformOverride;
+            }
+            else
+            {
+                this.platform = "editor";
+            }
 #elif UNITY_ANDROID
             this.platform = "android";
 #elif UNITY_IOS

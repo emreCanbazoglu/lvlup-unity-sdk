@@ -1,10 +1,13 @@
 {
-    "name": "LvlUp.Runtime",
-    "rootNamespace": "LvlUp",
+    "name": "LvlUp.Editor",
+    "rootNamespace": "LvlUp.Editor",
     "references": [
+        "LvlUp.Runtime",
         "Unity.Nuget.Newtonsoft-Json"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
