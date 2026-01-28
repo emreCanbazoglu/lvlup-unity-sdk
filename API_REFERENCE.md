@@ -245,6 +245,120 @@ LvlUpManager.Instance.GetPlayerJourneyProgress(response =>
 });
 ```
 
+#### Revenue Tracking
+
+The SDK provides a clean static API for tracking revenue from ad impressions and in-app purchases through `LvlUpSDK.Revenue`.
+
+##### LvlUpSDK.Revenue.Track
+```csharp
+public static void Track(RevenueData revenueData, Action<ApiResponse> callback = null)
+```
+Track custom revenue data with full control over all fields.
+
+**Parameters:**
+- `revenueData` (RevenueData): Revenue data object
+- `callback` (Action, optional): Callback with response
+
+**Example:**
+```csharp
+var revenueData = new RevenueData
+{
+    revenueType = "AD_IMPRESSION",
+    revenue = 0.005,
+    currency = "USD",
+    adNetworkName = "MAX",
+    adFormat = "REWARDED",
+    adUnitId = "ad_unit_123"
+};
+
+LvlUpSDK.Revenue.Track(revenueData, response =>
+{
+    if (response.success)
+        Debug.Log("Revenue tracked!");
+});
+```
+
+##### LvlUpSDK.Revenue.TrackAdImpression
+```csharp
+public static void TrackAdImpression(string adNetworkName, string adFormat, double revenue,
+    string adUnitId = null, string placement = null, string creativeId = null, string country = null)
+```
+Convenience method for tracking ad impressions.
+
+**Parameters:**
+- `adNetworkName` (string): Ad network name (e.g., "MAX", "AdMob", "IronSource")
+- `adFormat` (string): Ad format (e.g., "BANNER", "INTER", "REWARDED")
+- `revenue` (double): Revenue amount in USD
+- `adUnitId` (string, optional): Ad unit identifier
+- `placement` (string, optional): Placement name
+- `creativeId` (string, optional): Creative identifier
+- `country` (string, optional): Country code
+
+**Example:**
+```csharp
+LvlUpSDK.Revenue.TrackAdImpression(
+    adNetworkName: "MAX",
+    adFormat: "REWARDED",
+    revenue: 0.005,
+    adUnitId: "rewarded_ad_unit",
+    placement: "after_level"
+);
+```
+
+##### LvlUpSDK.Revenue.TrackInAppPurchase
+```csharp
+public static void TrackInAppPurchase(string productId, double revenue, string transactionId,
+    string store = null, string productName = null, int quantity = 1, bool isVerified = false)
+```
+Convenience method for tracking in-app purchases.
+
+**Parameters:**
+- `productId` (string): Product identifier (e.g., "com.game.coins_100")
+- `revenue` (double): Purchase amount in USD
+- `transactionId` (string): Unique transaction ID
+- `store` (string, optional): Store name (e.g., "APPLE_APP_STORE", "GOOGLE_PLAY")
+- `productName` (string, optional): Human-readable product name
+- `quantity` (int, optional): Quantity purchased (default: 1)
+- `isVerified` (bool, optional): Whether purchase is verified (default: false)
+
+**Example:**
+```csharp
+LvlUpSDK.Revenue.TrackInAppPurchase(
+    productId: "com.game.coins_100",
+    revenue: 0.99,
+    transactionId: "txn_123456789",
+    store: "APPLE_APP_STORE",
+    productName: "100 Coins",
+    quantity: 1,
+    isVerified: true
+);
+```
+
+##### LvlUpSDK.Revenue.Flush
+```csharp
+public static void Flush()
+```
+Manually flush the revenue queue to send all pending revenue data to the server immediately.
+
+**Example:**
+```csharp
+LvlUpSDK.Revenue.Flush();
+```
+
+##### LvlUpSDK.Revenue.QueuedCount
+```csharp
+public static int QueuedCount { get; }
+```
+Get the number of revenue items currently queued for sending.
+
+**Example:**
+```csharp
+int queuedCount = LvlUpSDK.Revenue.QueuedCount;
+Debug.Log($"Queued revenue items: {queuedCount}");
+```
+
+**Note:** For complete revenue tracking documentation, see [REVENUE_TRACKING_API.md](REVENUE_TRACKING_API.md).
+
 #### Utility Methods
 
 ##### IsInitialized

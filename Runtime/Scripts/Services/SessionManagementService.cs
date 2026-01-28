@@ -92,13 +92,7 @@ namespace LvlUp.Services
             if (_config.enableGeoTracking && geoData != null)
             {
                 request.SetGeoLocation(
-                    geoData.country,
-                    geoData.countryCode,
-                    geoData.region,
-                    geoData.city,
-                    geoData.latitude,
-                    geoData.longitude,
-                    geoData.timezone
+                    geoData.countryCode
                 );
             }
 
@@ -154,13 +148,7 @@ namespace LvlUp.Services
             if (_config.enableGeoTracking && geoData != null)
             {
                 request.SetGeoLocation(
-                    geoData.country,
-                    geoData.countryCode,
-                    geoData.region,
-                    geoData.city,
-                    geoData.latitude,
-                    geoData.longitude,
-                    geoData.timezone
+                    geoData.countryCode
                 );
             }
 

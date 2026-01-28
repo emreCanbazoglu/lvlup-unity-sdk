@@ -108,52 +108,11 @@ namespace LvlUp
             _config = config ?? new LvlUpConfig();
 
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
-            _geoService = new GeoLocationService();
-            _crashReporter = new CrashReporter(_httpClient, this, _apiKey, GetCachedGeoData, null, null);
-            _remoteConfigService = new RemoteConfigService();
-            _adMonetizationService = new AdMonetizationService();
             
-            // Initialize services
-            _sessionManagementService = new SessionManagementService(
-                _httpClient,
-                _config,
-                this,
-                GetCachedGeoData,
-                sessionId => _crashReporter.SetSessionId(sessionId),
-                userId => _crashReporter?.SetUserId(userId)
-            );
+            CreateServices();
 
-            _eventTrackingService = new EventTrackingService(
-                _httpClient,
-                _config,
-                this,
-                () => _sessionManagementService.GetCurrentUserId(),
-                () => _sessionManagementService.GetCurrentSession()?.sessionId,
-                () => _sessionManagementService.GetSessionNumber(),
-                ApplyGeoDataToEvent
-            );
+            InitializeServices(remoteConfigEnvironment);
 
-            _revenueTrackingService = new RevenueTrackingService(
-                _httpClient,
-                _config,
-                this,
-                () => _sessionManagementService.GetCurrentUserId(),
-                () => _sessionManagementService.GetCurrentSession()?.sessionId,
-                () => _sessionManagementService.GetSessionNumber(),
-                GetCachedGeoData,
-                GetPlatform,
-                GetManufacturer
-            );
-            
-            // Initialize Remote Config Service with environment from config
-            _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
-            _adMonetizationService.Initialize(_revenueTrackingService.TrackAdImpression);
-            
-            // Initialize other services
-            _sessionManagementService.Initialize();
-            _eventTrackingService.Initialize();
-            _revenueTrackingService.Initialize();
-            
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] Remote Config initialized with environment: {remoteConfigEnvironment}");
             
@@ -168,17 +127,85 @@ namespace LvlUp
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] SDK Initialized - Base URL: {_baseUrl}");
             
+            StartCoroutine(InitializeAsync());
+            
+        }
+
+        private void InitializeServices(string remoteConfigEnvironment)
+        {
+            // Initialize Remote Config Service with environment from config
+            _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
+            _adMonetizationService.Initialize(_revenueTrackingService.TrackAdImpression);
+            
+            // Initialize other services
+            _sessionManagementService.Initialize();
+            _eventTrackingService.Initialize();
+            _revenueTrackingService.Initialize();
+        }
+
+        private void CreateServices()
+        {
+            _geoService = new GeoLocationService();
+            _crashReporter = new CrashReporter(_httpClient, this, _apiKey, GetCachedGeoData, null, null);
+            _remoteConfigService = new RemoteConfigService();
+            _adMonetizationService = new AdMonetizationService();
+            
+            CreateSessionManagementService();
+            CreateEventTrackingService();
+            CreateRevenueTrackingService();
+        }
+
+        private void CreateRevenueTrackingService()
+        {
+            _revenueTrackingService = new RevenueTrackingService(
+                _httpClient,
+                _config,
+                this,
+                () => _sessionManagementService.GetCurrentUserId(),
+                () => _sessionManagementService.GetCurrentSession()?.sessionId,
+                () => _sessionManagementService.GetSessionNumber(),
+                GetCachedGeoData,
+                GetPlatform,
+                GetManufacturer
+            );
+        }
+
+        private void CreateEventTrackingService()
+        {
+            _eventTrackingService = new EventTrackingService(
+                _httpClient,
+                _config,
+                this,
+                () => _sessionManagementService.GetCurrentUserId(),
+                () => _sessionManagementService.GetCurrentSession()?.sessionId,
+                () => _sessionManagementService.GetSessionNumber(),
+                ApplyGeoDataToEvent
+            );
+        }
+
+        private void CreateSessionManagementService()
+        {
+            _sessionManagementService = new SessionManagementService(
+                _httpClient,
+                _config,
+                this,
+                GetCachedGeoData,
+                sessionId => _crashReporter.SetSessionId(sessionId),
+                userId => _crashReporter?.SetUserId(userId)
+            );
+        }
+
+        private IEnumerator InitializeAsync(Action<bool, string> onComplete = null)
+        {
             // Fetch remote configs - wait for geo if enabled, otherwise start immediately
             if (_config.enableGeoTracking)
             {
                 // Geo tracking enabled - start geo fetch and remote config will be fetched after
-                StartCoroutine(FetchGeoLocationAsync());
+                yield return StartCoroutine(FetchGeoLocationAsync());
             }
-            else
-            {
-                // Geo tracking disabled - fetch remote configs immediately
-                StartCoroutine(FetchRemoteConfigsAsync());
-            }
+            
+            // Fetch remote configs
+            StartCoroutine(FetchRemoteConfigsAsync());
 
             // Start automatic flush coroutine
             if (!_config.sendImmediately)
@@ -530,17 +557,11 @@ namespace LvlUp
                     _cachedGeoData = geoData;
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Geo location fetched: {geoData.city}, {geoData.region}, {geoData.country}");
-                    
-                    // After geo data is fetched, fetch remote configs with geo context
-                    StartCoroutine(FetchRemoteConfigsAsync());
                 },
                 onError: (error) =>
                 {
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to fetch geo location: {error}");
-                    
-                    // Still fetch remote config even if geo fetch failed
-                    StartCoroutine(FetchRemoteConfigsAsync());
                 }
             );
         }
@@ -576,13 +597,7 @@ namespace LvlUp
             if (_cachedGeoData != null && _cachedGeoData.IsValid())
             {
                 evt.SetGeoLocation(
-                    _cachedGeoData.country,
-                    _cachedGeoData.countryCode,
-                    _cachedGeoData.region,
-                    _cachedGeoData.city,
-                    _cachedGeoData.latitude,
-                    _cachedGeoData.longitude,
-                    _cachedGeoData.timezone
+                    _cachedGeoData.countryCode
                 );
             }
         }
@@ -818,13 +833,7 @@ namespace LvlUp
             if (_config.enableGeoTracking && _cachedGeoData != null)
             {
                 request.SetGeoLocation(
-                    _cachedGeoData.country,
-                    _cachedGeoData.countryCode,
-                    _cachedGeoData.region,
-                    _cachedGeoData.city,
-                    _cachedGeoData.latitude,
-                    _cachedGeoData.longitude,
-                    _cachedGeoData.timezone
+                    _cachedGeoData.countryCode
                 );
             }
 
@@ -967,6 +976,14 @@ namespace LvlUp
         public AdMonetizationService GetAdMonetizationService()
         {
             return _adMonetizationService;
+        }
+
+        /// <summary>
+        /// Get the RevenueTrackingService instance
+        /// </summary>
+        public RevenueTrackingService GetRevenueTrackingService()
+        {
+            return _revenueTrackingService;
         }
     }
 }

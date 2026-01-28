@@ -23,24 +23,14 @@ namespace LvlUp.Models
         // App info
         public string appVersion;
         public string appBuild;
-        public string bundleId;
-        public string engineVersion;
         public string sdkVersion;
         
         // Network & Additional
         public string connectionType;
         public int? sessionNum;
-        public string appSignature;
-        public string channelId;
         
         // Geographic location
-        public string country;        // ISO country code, e.g., "US", "TR"
         public string countryCode;    // ISO 3166-1 alpha-2, e.g., "US"
-        public string region;         // Region/State, e.g., "California", "Istanbul"
-        public string city;           // City name, e.g., "San Francisco", "Istanbul"
-        public float? latitude;       // Latitude coordinate
-        public float? longitude;      // Longitude coordinate
-        public string timezone;       // IANA timezone, e.g., "America/Los_Angeles"
 
 
         /// <summary>
@@ -57,20 +47,10 @@ namespace LvlUp.Models
             target.deviceId = this.deviceId;
             target.appVersion = this.appVersion;
             target.appBuild = this.appBuild;
-            target.bundleId = this.bundleId;
-            target.engineVersion = this.engineVersion;
             target.sdkVersion = this.sdkVersion;
             target.connectionType = this.connectionType;
             target.sessionNum = this.sessionNum;
-            target.appSignature = this.appSignature;
-            target.channelId = this.channelId;
-            target.country = this.country;
             target.countryCode = this.countryCode;
-            target.region = this.region;
-            target.city = this.city;
-            target.latitude = this.latitude;
-            target.longitude = this.longitude;
-            target.timezone = this.timezone;
         }
 
         /// <summary>
@@ -108,8 +88,6 @@ namespace LvlUp.Models
             this.device = SystemInfo.deviceModel;
             this.deviceId = SystemInfo.deviceUniqueIdentifier;
             this.appVersion = Application.version;
-            this.bundleId = Application.identifier;
-            this.engineVersion = $"unity {Application.unityVersion}";
             this.sdkVersion = "unity 1.0.0";
             
             // Connection type
@@ -137,14 +115,6 @@ namespace LvlUp.Models
                 using (AndroidJavaObject packageInfo = packageManager.Call<AndroidJavaObject>("getPackageInfo", Application.identifier, 0))
                 {
                     this.appBuild = packageInfo.Get<int>("versionCode").ToString();
-                }
-                
-                // Try to get channel ID (installer package)
-                using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-                using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
-                using (AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager"))
-                {
-                    this.channelId = packageManager.Call<string>("getInstallerPackageName", Application.identifier);
                 }
             }
             catch (Exception)
@@ -188,23 +158,16 @@ namespace LvlUp.Models
             }
 #endif
             
-            // Note: Geographic location is NOT auto-populated here because it requires async network call
-            // Use LvlUpManager.FetchAndPopulateGeoLocation() or manually set geo fields if needed
+            // Note: Geographic location (countryCode) is NOT auto-populated here because it requires async network call
+            // Use LvlUpManager.FetchAndPopulateGeoLocation() or manually set countryCode if needed
         }
 
         /// <summary>
-        /// Manually set geographic location data
+        /// Manually set geographic location data (only countryCode is used)
         /// </summary>
-        public void SetGeoLocation(string country, string countryCode, string region, string city, 
-            float? latitude = null, float? longitude = null, string timezone = null)
+        public void SetGeoLocation(string countryCode)
         {
-            this.country = country;
             this.countryCode = countryCode;
-            this.region = region;
-            this.city = city;
-            this.latitude = latitude;
-            this.longitude = longitude;
-            this.timezone = timezone;
         }
     }
 }

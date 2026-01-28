@@ -384,6 +384,55 @@ namespace LvlUp
         }
 
         #endregion
+
+        #region Revenue Tracking
+
+        /// <summary>
+        /// Revenue tracking API for ad impressions and in-app purchases
+        /// </summary>
+        public static class Revenue
+        {
+            /// <summary>
+            /// Track revenue data (ad impression or in-app purchase)
+            /// </summary>
+            public static void Track(RevenueData revenueData, Action<ApiResponse> callback = null)
+            {
+                Manager?.TrackRevenue(revenueData, callback);
+            }
+
+            /// <summary>
+            /// Track an ad impression
+            /// </summary>
+            public static void TrackAdImpression(string adNetworkName, string adFormat, double revenue,
+                string adUnitId = null, string placement = null, string creativeId = null, string country = null)
+            {
+                Manager?.TrackAdImpression(adNetworkName, adFormat, revenue, adUnitId, placement, creativeId);
+            }
+
+            /// <summary>
+            /// Track an in-app purchase
+            /// </summary>
+            public static void TrackInAppPurchase(string productId, double revenue, string transactionId,
+                string store = null, string productName = null, int quantity = 1, bool isVerified = false)
+            {
+                Manager?.TrackInAppPurchase(productId, revenue, transactionId, store, productName, quantity, isVerified);
+            }
+
+            /// <summary>
+            /// Flush queued revenue immediately
+            /// </summary>
+            public static void Flush()
+            {
+                Manager?.FlushRevenueQueue();
+            }
+
+            /// <summary>
+            /// Get number of queued revenue items
+            /// </summary>
+            public static int QueuedCount => Manager?.GetRevenueTrackingService()?.GetQueuedRevenueCount() ?? 0;
+        }
+
+        #endregion
     }
 }
 

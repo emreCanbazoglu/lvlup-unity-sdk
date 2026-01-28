@@ -206,11 +206,6 @@ namespace LvlUp.Services
 
         private void PopulateRevenueContext(RevenueData revenueData)
         {
-            // Add session number
-            int sessionNum = _getSessionNum();
-            if (sessionNum > 0)
-                revenueData.sessionNum = sessionNum;
-
             // Apply device metadata
             revenueData.platform = _getPlatform();
             revenueData.osVersion = SystemInfo.operatingSystem;
@@ -218,9 +213,6 @@ namespace LvlUp.Services
             revenueData.device = SystemInfo.deviceModel;
             revenueData.deviceId = SystemInfo.deviceUniqueIdentifier;
             revenueData.appVersion = Application.version;
-            revenueData.bundleId = Application.identifier;
-            revenueData.engineVersion = $"unity {Application.unityVersion}";
-            revenueData.sdkVersion = "unity 1.0.0";
 
             // Connection type
             if (Application.internetReachability == NetworkReachability.NotReachable)
@@ -230,17 +222,11 @@ namespace LvlUp.Services
             else if (Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork)
                 revenueData.connectionType = "wifi";
 
-            // Apply geo data if available
+            // Apply geo data if available (only countryCode)
             var geoData = _getGeoData();
             if (_config.enableGeoTracking && geoData != null)
             {
-                revenueData.country = geoData.country;
                 revenueData.countryCode = geoData.countryCode;
-                revenueData.region = geoData.region;
-                revenueData.city = geoData.city;
-                revenueData.latitude = geoData.latitude;
-                revenueData.longitude = geoData.longitude;
-                revenueData.timezone = geoData.timezone;
             }
         }
 

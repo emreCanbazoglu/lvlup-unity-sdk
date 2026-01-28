@@ -218,13 +218,7 @@ namespace LvlUp.Services
                     if (geoData != null && geoData.IsValid())
                     {
                         report.SetGeoLocation(
-                            geoData.country,
-                            geoData.countryCode,
-                            geoData.region,
-                            geoData.city,
-                            geoData.latitude,
-                            geoData.longitude,
-                            geoData.timezone
+                            geoData.countryCode
                         );
                     }
                 }

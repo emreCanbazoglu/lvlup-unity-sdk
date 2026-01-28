@@ -50,20 +50,8 @@ namespace LvlUp.Models
         public string deviceId;
         public string appVersion;
         public string appBuild;
-        public string bundleId;
-        public string engineVersion;
-        public string sdkVersion;
         public string connectionType;
-        public int? sessionNum;
-        public string appSignature;
-        public string channelId;
-        public string country;
         public string countryCode;
-        public string region;
-        public string city;
-        public float? latitude;
-        public float? longitude;
-        public string timezone;
         
         // Additional data
         public string customData;         // JSON string for additional data
