@@ -1,0 +1,19 @@
+{
+    "name": "LvlUp.SRDebugger",
+    "rootNamespace": "",
+    "references": [
+        "LvlUp.Runtime",
+        "StompyRobot.SRDebugger"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "lvlup_srdebugger_enabled"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
