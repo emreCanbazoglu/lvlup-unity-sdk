@@ -15,7 +15,6 @@ namespace LvlUp.Models
         
         // Timing
         public long timestamp;            // Unix timestamp in milliseconds
-        public long? clientTs;            // Client timestamp
         public long? transactionTimestamp; // Transaction timestamp from store/network
         
         // Ad Impression fields (populated when revenueType = "AD_IMPRESSION")
@@ -33,24 +32,16 @@ namespace LvlUp.Models
         public string productName;
         public string productType;        // e.g., "CONSUMABLE", "NON_CONSUMABLE", "SUBSCRIPTION"
         public string transactionId;      // Unique ID for deduplication
-        public string orderId;
-        public string purchaseToken;
         public string store;              // e.g., "APPLE_APP_STORE", "GOOGLE_PLAY"
         public bool isVerified;
         public int quantity;
-        public bool isSandbox;
         public bool isRestored;
-        public string subscriptionPeriod;
         
         // Context (from EventMetadata)
         public string platform;
-        public string osVersion;
-        public string manufacturer;
-        public string device;
         public string deviceId;
         public string appVersion;
         public string appBuild;
-        public string connectionType;
         public string countryCode;
         
         // Additional data
@@ -60,7 +51,6 @@ namespace LvlUp.Models
         {
             currency = "USD";
             timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            clientTs = timestamp;
             quantity = 1;
         }
     }

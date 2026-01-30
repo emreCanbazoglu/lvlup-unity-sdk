@@ -706,10 +706,10 @@ namespace LvlUp
         /// <summary>
         /// Track an in-app purchase (convenience method)
         /// </summary>
-        public void TrackInAppPurchase(string productId, double revenue, string transactionId,
-            string store = null, string productName = null, int quantity = 1, bool isVerified = false)
+        public void TrackInAppPurchase(string productId, double revenue, string currency, string transactionId,
+            string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
         {
-            _revenueTrackingService.TrackInAppPurchase(productId, revenue, transactionId, store, productName, quantity, isVerified);
+            _revenueTrackingService.TrackInAppPurchase(productId, revenue, currency, transactionId, store, productName, productType, quantity, isVerified);
         }
 
         #endregion

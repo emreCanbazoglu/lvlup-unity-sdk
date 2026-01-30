@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using LvlUp.Models;
+using LvlUp.Utils;
 
 namespace LvlUp.Services
 {
@@ -119,16 +120,17 @@ namespace LvlUp.Services
         /// <summary>
         /// Track an in-app purchase (convenience method)
         /// </summary>
-        public void TrackInAppPurchase(string productId, double revenue, string transactionId,
-            string store = null, string productName = null, int quantity = 1, bool isVerified = false)
+        public void TrackInAppPurchase(string productId, double revenue, string currency, string transactionId,
+            string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
         {
             var revenueData = new RevenueData
             {
                 revenueType = "IN_APP_PURCHASE",
                 revenue = revenue,
-                currency = "USD",
+                currency = currency,
                 productId = productId,
                 productName = productName,
+                productType = productType,
                 transactionId = transactionId,
                 store = store,
                 quantity = quantity,
@@ -208,19 +210,9 @@ namespace LvlUp.Services
         {
             // Apply device metadata
             revenueData.platform = _getPlatform();
-            revenueData.osVersion = SystemInfo.operatingSystem;
-            revenueData.manufacturer = _getManufacturer();
-            revenueData.device = SystemInfo.deviceModel;
             revenueData.deviceId = SystemInfo.deviceUniqueIdentifier;
             revenueData.appVersion = Application.version;
-
-            // Connection type
-            if (Application.internetReachability == NetworkReachability.NotReachable)
-                revenueData.connectionType = "offline";
-            else if (Application.internetReachability == NetworkReachability.ReachableViaCarrierDataNetwork)
-                revenueData.connectionType = "wwan";
-            else if (Application.internetReachability == NetworkReachability.ReachableViaLocalAreaNetwork)
-                revenueData.connectionType = "wifi";
+            revenueData.appBuild = DeviceInfo.GetAppBuild();
 
             // Apply geo data if available (only countryCode)
             var geoData = _getGeoData();
