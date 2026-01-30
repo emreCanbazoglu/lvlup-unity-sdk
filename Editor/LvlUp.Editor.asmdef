@@ -1,0 +1,27 @@
+{
+    "name": "LvlUp.Editor",
+    "rootNamespace": "LvlUp.Editor",
+    "references": [
+        "LvlUp.Runtime",
+        "Unity.Nuget.Newtonsoft-Json",
+        "MaxSdk.Scripts"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.applovin.mediation",
+            "expression": "",
+            "define": "lvlup_max_enabled"
+        }
+    ],
+    "noEngineReferences": false
+}
+
