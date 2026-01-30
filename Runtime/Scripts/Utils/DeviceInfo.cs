@@ -47,7 +47,7 @@ namespace LvlUp.Utils
 #elif UNITY_IOS
                 return UnityEditor.PlayerSettings.iOS.buildNumber;
 #else
-                return "Unknown" // Default for editor
+                return "Unknown"; // Default for editor
 #endif
             }
             catch (Exception)
