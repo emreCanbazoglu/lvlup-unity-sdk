@@ -120,7 +120,7 @@ namespace LvlUp.Services
         /// <summary>
         /// Track an in-app purchase (convenience method)
         /// </summary>
-        public void TrackInAppPurchase(string productId, double revenue, string currency, string transactionId,
+        public void TrackInAppPurchase(string productId, double revenue, string currency, double revenueUSD, string transactionId,
             string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
         {
             var revenueData = new RevenueData
@@ -128,6 +128,7 @@ namespace LvlUp.Services
                 revenueType = "IN_APP_PURCHASE",
                 revenue = revenue,
                 currency = currency,
+                revenueUSD = revenueUSD,
                 productId = productId,
                 productName = productName,
                 productType = productType,

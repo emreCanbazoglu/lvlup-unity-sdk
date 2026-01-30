@@ -412,10 +412,10 @@ namespace LvlUp
             /// <summary>
             /// Track an in-app purchase
             /// </summary>
-            public static void TrackInAppPurchase(string productId, double revenue, string currency, string transactionId,
+            public static void TrackInAppPurchase(string productId, double revenue, string currency, double revenueUSD, string transactionId,
                 string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
             {
-                Manager?.TrackInAppPurchase(productId, revenue, currency, transactionId, store, productName, productType, quantity, isVerified);
+                Manager?.TrackInAppPurchase(productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified);
             }
 
             /// <summary>

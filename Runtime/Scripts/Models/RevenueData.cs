@@ -11,6 +11,7 @@ namespace LvlUp.Models
         // Core fields
         public string revenueType;        // "AD_IMPRESSION" or "IN_APP_PURCHASE"
         public double revenue;            // Revenue amount
+        public double revenueUSD;         // Revenue amount in USD
         public string currency;           // Currency code (default: "USD")
         
         // Timing

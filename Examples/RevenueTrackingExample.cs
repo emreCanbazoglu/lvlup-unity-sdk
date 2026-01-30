@@ -27,6 +27,7 @@ public class RevenueTrackingExample : MonoBehaviour
             productId: "com.game.coins_100",
             revenue: 0.99,
             currency: "USD",
+            revenueUSD: 0.99,
             transactionId: "txn_123456789",
             store: "APPLE_APP_STORE",
             productName: "100 Coins",
