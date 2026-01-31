@@ -55,6 +55,8 @@ namespace LvlUp.Utils
                 return "Unknown"; // Fallback
             }
 #endif
+            
+            return "Unknown"; // Fallback for unsupported platforms
         }
         
     }
