@@ -110,8 +110,7 @@ namespace LvlUp.Services
                 adFormat = adFormat,
                 adUnitId = adUnitId,
                 adPlacement = placement,
-                adCreativeId = creativeId,
-                adImpressionId = Guid.NewGuid().ToString()
+                adCreativeId = creativeId
             };
 
             TrackRevenue(revenueData);
@@ -207,6 +206,35 @@ namespace LvlUp.Services
             }
         }
 
+        /// <summary>
+        /// Clear all persisted offline revenue (call after successful send)
+        /// </summary>
+        private void ClearPersistedRevenue()
+        {
+            try
+            {
+                int count = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
+                
+                // Delete all persisted items
+                for (int i = 0; i < count; i++)
+                {
+                    string key = $"{PREF_OFFLINE_REVENUE}_{i}";
+                    PlayerPrefs.DeleteKey(key);
+                }
+                
+                // Delete count key
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
+                PlayerPrefs.Save();
+                
+                if (_config.enableDebugLogs && count > 0)
+                    Debug.Log($"[LvlUp] Cleared {count} persisted offline revenue items");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to clear persisted revenue: {ex.Message}");
+            }
+        }
+
         private void PopulateRevenueContext(RevenueData revenueData)
         {
             // Apply device metadata
@@ -244,6 +272,9 @@ namespace LvlUp.Services
                 {
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Revenue batch sent successfully: {batch.Count} items");
+                    
+                    // Clear offline storage for successfully sent items
+                    ClearPersistedRevenue();
                 }
                 else
                 {
@@ -252,7 +283,7 @@ namespace LvlUp.Services
                     // Re-queue failed events for retry
                     _revenueBatch.InsertRange(0, batch);
 
-                    // Persist to PlayerPrefs for offline support
+                    // Persist to PlayerPrefs for offline support (only on failure)
                     PersistRevenue(batch);
                 }
             });
