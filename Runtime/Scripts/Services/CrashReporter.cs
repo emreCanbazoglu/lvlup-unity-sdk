@@ -28,6 +28,7 @@ namespace LvlUp.Services
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
         private const int MAX_BREADCRUMBS = 20;
         private const int MAX_RETRY_ATTEMPTS = 3;
+        private const int MAX_FAILED_REPORTS = 10; // Prevent unbounded growth of failed reports in memory
         private bool _isReporting = false; // Prevent recursive crash reporting
 
         public CrashReporter(LvlUpHttpClient httpClient, MonoBehaviour coroutineRunner, string apiKey, Func<GeoData> getGeoDataFunc = null, string userId = null, string sessionId = null)
@@ -162,6 +163,40 @@ namespace LvlUp.Services
         }
 
         /// <summary>
+        /// Check if we can report a crash (memory guard)
+        /// </summary>
+        private bool CanReportCrash()
+        {
+            // Check if failed reports dictionary is getting too large (memory guard)
+            if (_failedReports.Count >= MAX_FAILED_REPORTS)
+            {
+                Debug.LogWarning($"[LvlUp CrashReporter] Max failed crash reports in memory reached: {_failedReports.Count}/{MAX_FAILED_REPORTS}. Clearing old failed reports.");
+                
+                // Remove oldest failed reports (keep only recent ones for retry)
+                var keysToRemove = new List<Models.CrashReport>();
+                int countToRemove = _failedReports.Count - (MAX_FAILED_REPORTS / 2); // Keep half
+                
+                int removed = 0;
+                foreach (var kvp in _failedReports)
+                {
+                    if (removed >= countToRemove)
+                        break;
+                    keysToRemove.Add(kvp.Key);
+                    removed++;
+                }
+                
+                foreach (var key in keysToRemove)
+                {
+                    _failedReports.Remove(key);
+                }
+                
+                Debug.Log($"[LvlUp CrashReporter] Cleared {keysToRemove.Count} failed crash reports to free memory");
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Manually report a crash or exception
         /// </summary>
         public void ReportCrash(
@@ -182,6 +217,13 @@ namespace LvlUp.Services
             if (_isReporting)
             {
                 Debug.LogWarning("[LvlUp CrashReporter] Already reporting a crash, skipping to prevent infinite loop");
+                return;
+            }
+
+            // Memory guard: check if we can report more crashes
+            if (!CanReportCrash())
+            {
+                Debug.LogWarning("[LvlUp CrashReporter] Cannot report crash due to memory constraints");
                 return;
             }
 
@@ -273,11 +315,18 @@ namespace LvlUp.Services
                                 _failedReports[report]++;
                             }
 
-                            // Log if max retries reached
+                            // Log if max retries reached and remove to free memory
                             if (_failedReports[report] >= MAX_RETRY_ATTEMPTS)
                             {
                                 Debug.LogError($"[LvlUp CrashReporter] Dropping crash report after {MAX_RETRY_ATTEMPTS} failed attempts: {report.Message}");
                                 _failedReports.Remove(report);
+                                
+                                // Safety check: ensure dictionary doesn't grow unbounded
+                                if (_failedReports.Count > MAX_FAILED_REPORTS)
+                                {
+                                    Debug.LogWarning($"[LvlUp CrashReporter] Failed reports dictionary exceeded max size ({_failedReports.Count}). Emergency clearing...");
+                                    _failedReports.Clear();
+                                }
                             }
                         }
                         else

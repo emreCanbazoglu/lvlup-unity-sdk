@@ -31,6 +31,10 @@ namespace LvlUp.Services
         // PlayerPrefs keys for persistence
         private const string PREF_OFFLINE_REVENUE = "LvlUp_OfflineRevenue";
         private const string PREF_OFFLINE_REVENUE_COUNT = "LvlUp_OfflineRevenueCount";
+        
+        // Memory and storage guards
+        private const int MAX_PERSISTED_REVENUE = 50; // Absolute max revenue items to persist (revenue data is larger)
+        private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 10MB - minimum free memory required to persist
 
         public RevenueTrackingService(
             LvlUpHttpClient httpClient,
@@ -168,26 +172,75 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Persist revenue for offline support
+        /// Check if we have enough memory and storage to persist revenue
+        /// </summary>
+        private bool CanPersistRevenue()
+        {
+            // Check free memory
+            long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+            if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
+            {
+                Debug.LogWarning($"[LvlUp] Insufficient memory to persist revenue. Free memory: {freeMemory / (1024 * 1024)}MB, Required: {MAX_MEMORY_FREE_THRESHOLD / (1024 * 1024)}MB");
+                return false;
+            }
+
+            // Check current persisted revenue count
+            int currentPersistedCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
+            if (currentPersistedCount >= MAX_PERSISTED_REVENUE)
+            {
+                Debug.LogWarning($"[LvlUp] Max persisted revenue limit reached: {currentPersistedCount}/{MAX_PERSISTED_REVENUE}. Clearing old revenue data.");
+                ClearPersistedRevenue();
+                return true; // Continue with fresh slate
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Persist revenue (Ad Impression or In-App Purchase) for offline support with guards
         /// </summary>
         public void PersistRevenue(List<RevenueData> revenue)
         {
+            if (revenue == null || revenue.Count == 0)
+                return;
+
+            // Check if we can persist (memory and storage guards)
+            if (!CanPersistRevenue())
+            {
+                Debug.LogWarning("[LvlUp] Cannot persist revenue due to memory/storage constraints. Dropping revenue data.");
+                return;
+            }
+
             try
             {
                 int existingCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
+                int maxNewItems = Mathf.Max(0, MAX_PERSISTED_REVENUE - existingCount);
 
-                for (int i = 0; i < revenue.Count; i++)
+                if (maxNewItems <= 0)
+                {
+                    Debug.LogWarning($"[LvlUp] Revenue storage limit reached. Cannot persist more items.");
+                    return;
+                }
+
+                // Only persist up to the limit
+                int itemsToStore = Mathf.Min(revenue.Count, maxNewItems);
+                if (itemsToStore < revenue.Count)
+                {
+                    Debug.LogWarning($"[LvlUp] Limiting persisted revenue from {revenue.Count} to {itemsToStore} to prevent memory issues");
+                }
+
+                for (int i = 0; i < itemsToStore; i++)
                 {
                     string json = JsonUtility.ToJson(revenue[i]);
                     string key = $"{PREF_OFFLINE_REVENUE}_{existingCount + i}";
                     PlayerPrefs.SetString(key, json);
                 }
 
-                PlayerPrefs.SetInt(PREF_OFFLINE_REVENUE_COUNT, existingCount + revenue.Count);
+                PlayerPrefs.SetInt(PREF_OFFLINE_REVENUE_COUNT, existingCount + itemsToStore);
                 PlayerPrefs.Save();
 
                 if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Persisted {revenue.Count} revenue items for offline");
+                    Debug.Log($"[LvlUp] Persisted {itemsToStore} revenue items for offline");
             }
             catch (Exception ex)
             {
@@ -312,15 +365,44 @@ namespace LvlUp.Services
                 if (count == 0)
                     return;
 
+                // Safety check: if persisted count is suspiciously high, it might be corrupted
+                if (count > MAX_PERSISTED_REVENUE * 2)
+                {
+                    Debug.LogWarning($"[LvlUp] Persisted revenue count ({count}) exceeds safety threshold ({MAX_PERSISTED_REVENUE * 2}). Data may be corrupted. Clearing.");
+                    ClearPersistedRevenue();
+                    return;
+                }
+
+                // Check free memory before loading
+                long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+                if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
+                {
+                    Debug.LogWarning($"[LvlUp] Insufficient free memory ({freeMemory / (1024 * 1024)}MB) to load persisted revenue. Skipping load to prevent crash.");
+                    ClearPersistedRevenue();
+                    return;
+                }
+
                 int loadedCount = 0;
+                int skippedCount = 0;
+                
                 for (int i = 0; i < count; i++)
                 {
                     string key = $"{PREF_OFFLINE_REVENUE}_{i}";
                     if (PlayerPrefs.HasKey(key))
                     {
-                        string json = PlayerPrefs.GetString(key);
                         try
                         {
+                            string json = PlayerPrefs.GetString(key);
+                            
+                            // Sanity check: JSON string shouldn't be unreasonably large
+                            if (json.Length > 100000) // 100KB per revenue item is unreasonable
+                            {
+                                Debug.LogWarning($"[LvlUp] Revenue {i} data suspiciously large ({json.Length} bytes). Skipping to prevent memory issues.");
+                                skippedCount++;
+                                PlayerPrefs.DeleteKey(key);
+                                continue;
+                            }
+                            
                             var revenue = JsonUtility.FromJson<RevenueData>(json);
                             if (revenue != null)
                             {
@@ -331,6 +413,7 @@ namespace LvlUp.Services
                         catch (Exception ex)
                         {
                             Debug.LogWarning($"[LvlUp] Failed to deserialize revenue {i}: {ex.Message}");
+                            skippedCount++;
                         }
 
                         PlayerPrefs.DeleteKey(key);
@@ -341,11 +424,20 @@ namespace LvlUp.Services
                 PlayerPrefs.Save();
 
                 if (loadedCount > 0 && _config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline revenue items");
+                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline revenue items" + (skippedCount > 0 ? $" (skipped {skippedCount} corrupted)" : ""));
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to load persisted revenue: {ex.Message}");
+                // Clear potentially corrupted data
+                try
+                {
+                    ClearPersistedRevenue();
+                }
+                catch (Exception clearEx)
+                {
+                    Debug.LogWarning($"[LvlUp] Failed to clear corrupted revenue: {clearEx.Message}");
+                }
             }
         }
     }

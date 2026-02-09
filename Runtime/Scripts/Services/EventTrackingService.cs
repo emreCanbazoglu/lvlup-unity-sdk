@@ -28,6 +28,10 @@ namespace LvlUp.Services
 
         // Server limits
         private const int MAX_BATCH_SIZE = 100; // Maximum events per batch allowed by server
+        
+        // Memory and storage guards
+        private const int MAX_PERSISTED_EVENTS = 1000; // Absolute max events to persist (guard against unbounded growth)
+        private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 10MB - minimum free memory required to persist
 
         // PlayerPrefs keys for persistence
         private const string PREF_OFFLINE_EVENTS = "LvlUp_OfflineEvents";
@@ -202,7 +206,60 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Persist events for offline support
+        /// Check if we have enough memory and storage to persist events
+        /// </summary>
+        private bool CanPersistEvents()
+        {
+            // Check free memory
+            long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+            if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
+            {
+                Debug.LogWarning($"[LvlUp] Insufficient memory to persist events. Free memory: {freeMemory / (1024 * 1024)}MB, Required: {MAX_MEMORY_FREE_THRESHOLD / (1024 * 1024)}MB");
+                return false;
+            }
+
+            // Check current persisted event count
+            int currentPersistedCount = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
+            if (currentPersistedCount >= MAX_PERSISTED_EVENTS)
+            {
+                Debug.LogWarning($"[LvlUp] Max persisted events limit reached: {currentPersistedCount}/{MAX_PERSISTED_EVENTS}. Clearing old events.");
+                ClearPersistedEvents();
+                return true; // Continue with fresh slate
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Clear persisted offline events (called when limit is reached)
+        /// </summary>
+        private void ClearPersistedEvents()
+        {
+            try
+            {
+                int count = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
+                for (int i = 0; i < count; i++)
+                {
+                    string key = $"{PREF_OFFLINE_EVENTS}_{i}";
+                    if (PlayerPrefs.HasKey(key))
+                    {
+                        PlayerPrefs.DeleteKey(key);
+                    }
+                }
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENT_COUNT);
+                PlayerPrefs.Save();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Cleared {count} stale offline events to prevent memory bloat");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to clear persisted events: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist events for offline support with memory guards
         /// </summary>
         public void PersistEvents()
         {
@@ -214,6 +271,14 @@ namespace LvlUp.Services
                 return;
             }
 
+            // Check if we can persist (memory and storage guards)
+            if (!CanPersistEvents())
+            {
+                Debug.LogWarning("[LvlUp] Cannot persist events due to memory/storage constraints. Clearing batch.");
+                _eventBatch.Clear();
+                return;
+            }
+
             try
             {
                 var eventsJson = new List<string>();
@@ -221,6 +286,14 @@ namespace LvlUp.Services
                 {
                     string json = JsonUtility.ToJson(evt);
                     eventsJson.Add(json);
+                }
+
+                // Guard: limit persisted events to prevent unbounded growth
+                int maxEventsToStore = Mathf.Min(eventsJson.Count, MAX_PERSISTED_EVENTS);
+                if (maxEventsToStore < eventsJson.Count)
+                {
+                    Debug.LogWarning($"[LvlUp] Limiting persisted events from {eventsJson.Count} to {maxEventsToStore} to prevent memory issues");
+                    eventsJson = eventsJson.GetRange(0, maxEventsToStore);
                 }
 
                 PlayerPrefs.SetInt(PREF_OFFLINE_EVENT_COUNT, eventsJson.Count);
@@ -236,6 +309,7 @@ namespace LvlUp.Services
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to persist events: {ex.Message}");
+                // Don't lose events - keep them in memory batch even if persistence fails
             }
         }
 
@@ -342,15 +416,44 @@ namespace LvlUp.Services
                 if (count == 0)
                     return;
 
+                // Safety check: if persisted count is suspiciously high, it might be corrupted
+                if (count > MAX_PERSISTED_EVENTS * 2)
+                {
+                    Debug.LogWarning($"[LvlUp] Persisted event count ({count}) exceeds safety threshold ({MAX_PERSISTED_EVENTS * 2}). Data may be corrupted. Clearing.");
+                    ClearPersistedEvents();
+                    return;
+                }
+
+                // Check free memory before loading
+                long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+                if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
+                {
+                    Debug.LogWarning($"[LvlUp] Insufficient free memory ({freeMemory / (1024 * 1024)}MB) to load persisted events. Skipping load to prevent crash.");
+                    ClearPersistedEvents();
+                    return;
+                }
+
                 int loadedCount = 0;
+                int skippedCount = 0;
+                
                 for (int i = 0; i < count; i++)
                 {
                     string key = $"{PREF_OFFLINE_EVENTS}_{i}";
                     if (PlayerPrefs.HasKey(key))
                     {
-                        string json = PlayerPrefs.GetString(key);
                         try
                         {
+                            string json = PlayerPrefs.GetString(key);
+                            
+                            // Sanity check: JSON string shouldn't be unreasonably large
+                            if (json.Length > 50000) // 50KB per event is unreasonable
+                            {
+                                Debug.LogWarning($"[LvlUp] Event {i} data suspiciously large ({json.Length} bytes). Skipping to prevent memory issues.");
+                                skippedCount++;
+                                PlayerPrefs.DeleteKey(key);
+                                continue;
+                            }
+                            
                             var evt = JsonUtility.FromJson<LvlUpEvent>(json);
                             if (evt != null)
                             {
@@ -361,6 +464,7 @@ namespace LvlUp.Services
                         catch (Exception ex)
                         {
                             Debug.LogWarning($"[LvlUp] Failed to deserialize event {i}: {ex.Message}");
+                            skippedCount++;
                         }
 
                         PlayerPrefs.DeleteKey(key);
@@ -371,11 +475,20 @@ namespace LvlUp.Services
                 PlayerPrefs.Save();
 
                 if (loadedCount > 0 && _config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline events");
+                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline events" + (skippedCount > 0 ? $" (skipped {skippedCount} corrupted)" : ""));
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to load persisted events: {ex.Message}");
+                // Clear potentially corrupted data
+                try
+                {
+                    ClearPersistedEvents();
+                }
+                catch (Exception clearEx)
+                {
+                    Debug.LogWarning($"[LvlUp] Failed to clear corrupted events: {clearEx.Message}");
+                }
             }
         }
     }
