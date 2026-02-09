@@ -41,6 +41,8 @@ namespace LvlUp.Services
         private const string PREF_PENDING_SESSION_START_COUNT = "LvlUp_PendingSessionStartCount";
         private const string PREF_PENDING_SESSION_ENDS = "LvlUp_PendingSessionEnds";
         private const string PREF_PENDING_SESSION_END_COUNT = "LvlUp_PendingSessionEndCount";
+        private const int MAX_PENDING_SESSION_STARTS_HARD_CAP = 500;
+        private const int MAX_PENDING_SESSION_ENDS_HARD_CAP = 500;
 
         public SessionManagementService(
             LvlUpHttpClient httpClient,
@@ -77,9 +79,16 @@ namespace LvlUp.Services
             _onUserIdChanged?.Invoke(_currentUserId);
 
             // Increment session number
-            _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
-            PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
-            PlayerPrefs.Save();
+            if (_config.persistQueueToDisk)
+            {
+                _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
+                PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
+                PlayerPrefs.Save();
+            }
+            else
+            {
+                _sessionNumber += 1;
+            }
 
             var request = new SessionStartRequest
             {
@@ -114,7 +123,7 @@ namespace LvlUp.Services
                 else
                 {
                     // Failed to start session (likely offline)
-                    _pendingSessionStarts.Add(request);
+                    EnqueuePendingSessionStart(request);
                     _hasOfflineSession = true;
 
                     PersistPendingSessions();
@@ -155,7 +164,7 @@ namespace LvlUp.Services
             // If we have an offline session, just store the end request
             if (_hasOfflineSession && _currentSession == null)
             {
-                _pendingSessionEnds.Add(request);
+                EnqueuePendingSessionEnd(request);
                 PersistPendingSessions();
 
                 if (_config.enableDebugLogs)
@@ -187,7 +196,7 @@ namespace LvlUp.Services
                 else
                 {
                     // Failed to end session - add to pending list
-                    _pendingSessionEnds.Add(request);
+                    EnqueuePendingSessionEnd(request);
                     PersistPendingSessions();
 
                     if (_config.enableDebugLogs)
@@ -348,8 +357,16 @@ namespace LvlUp.Services
 
         private void PersistPendingSessions()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
             try
             {
+                EnforcePendingQueueCaps();
+
+                int previousStartCount = PlayerPrefs.GetInt(PREF_PENDING_SESSION_START_COUNT, 0);
+                int previousEndCount = PlayerPrefs.GetInt(PREF_PENDING_SESSION_END_COUNT, 0);
+
                 // Persist session starts
                 PlayerPrefs.SetInt(PREF_PENDING_SESSION_START_COUNT, _pendingSessionStarts.Count);
                 for (int i = 0; i < _pendingSessionStarts.Count; i++)
@@ -357,6 +374,7 @@ namespace LvlUp.Services
                     string json = JsonUtility.ToJson(_pendingSessionStarts[i]);
                     PlayerPrefs.SetString($"{PREF_PENDING_SESSION_STARTS}_{i}", json);
                 }
+                DeleteIndexedPrefRange(PREF_PENDING_SESSION_STARTS, _pendingSessionStarts.Count, previousStartCount);
 
                 // Persist session ends
                 PlayerPrefs.SetInt(PREF_PENDING_SESSION_END_COUNT, _pendingSessionEnds.Count);
@@ -365,6 +383,7 @@ namespace LvlUp.Services
                     string json = JsonUtility.ToJson(_pendingSessionEnds[i]);
                     PlayerPrefs.SetString($"{PREF_PENDING_SESSION_ENDS}_{i}", json);
                 }
+                DeleteIndexedPrefRange(PREF_PENDING_SESSION_ENDS, _pendingSessionEnds.Count, previousEndCount);
 
                 PlayerPrefs.Save();
 
@@ -379,6 +398,9 @@ namespace LvlUp.Services
 
         private void LoadPendingSessions()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
             try
             {
                 // Load pending session starts
@@ -394,7 +416,7 @@ namespace LvlUp.Services
                             var request = JsonUtility.FromJson<SessionStartRequest>(json);
                             if (request != null)
                             {
-                                _pendingSessionStarts.Add(request);
+                                EnqueuePendingSessionStart(request);
                             }
                         }
                         catch (Exception ex)
@@ -419,7 +441,7 @@ namespace LvlUp.Services
                             var request = JsonUtility.FromJson<SessionEndRequest>(json);
                             if (request != null)
                             {
-                                _pendingSessionEnds.Add(request);
+                                EnqueuePendingSessionEnd(request);
                             }
                         }
                         catch (Exception ex)
@@ -446,6 +468,71 @@ namespace LvlUp.Services
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to load pending sessions: {ex.Message}");
+            }
+        }
+
+        private int GetPendingSessionStartsCap()
+        {
+            return Mathf.Max(1, Mathf.Min(_config.maxQueueSize, MAX_PENDING_SESSION_STARTS_HARD_CAP));
+        }
+
+        private int GetPendingSessionEndsCap()
+        {
+            return Mathf.Max(1, Mathf.Min(_config.maxQueueSize, MAX_PENDING_SESSION_ENDS_HARD_CAP));
+        }
+
+        private void EnforcePendingQueueCaps()
+        {
+            TrimPendingStartsToCap();
+            TrimPendingEndsToCap();
+        }
+
+        private void EnqueuePendingSessionStart(SessionStartRequest request)
+        {
+            _pendingSessionStarts.Add(request);
+            TrimPendingStartsToCap();
+        }
+
+        private void EnqueuePendingSessionEnd(SessionEndRequest request)
+        {
+            _pendingSessionEnds.Add(request);
+            TrimPendingEndsToCap();
+        }
+
+        private void TrimPendingStartsToCap()
+        {
+            int cap = GetPendingSessionStartsCap();
+            if (_pendingSessionStarts.Count <= cap)
+                return;
+
+            int overflow = _pendingSessionStarts.Count - cap;
+            _pendingSessionStarts.RemoveRange(0, overflow);
+
+            if (_config.enableDebugLogs)
+                Debug.LogWarning($"[LvlUp] Pending session start queue cap reached ({cap}). Dropped {overflow} oldest item(s).");
+        }
+
+        private void TrimPendingEndsToCap()
+        {
+            int cap = GetPendingSessionEndsCap();
+            if (_pendingSessionEnds.Count <= cap)
+                return;
+
+            int overflow = _pendingSessionEnds.Count - cap;
+            _pendingSessionEnds.RemoveRange(0, overflow);
+
+            if (_config.enableDebugLogs)
+                Debug.LogWarning($"[LvlUp] Pending session end queue cap reached ({cap}). Dropped {overflow} oldest item(s).");
+        }
+
+        private void DeleteIndexedPrefRange(string prefix, int startInclusive, int endExclusive)
+        {
+            if (endExclusive <= startInclusive)
+                return;
+
+            for (int i = startInclusive; i < endExclusive; i++)
+            {
+                PlayerPrefs.DeleteKey($"{prefix}_{i}");
             }
         }
 
@@ -566,4 +653,3 @@ namespace LvlUp.Services
         }
     }
 }
-

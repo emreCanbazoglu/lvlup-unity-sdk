@@ -33,7 +33,7 @@ namespace LvlUp.Services
         private const string PREF_OFFLINE_REVENUE_COUNT = "LvlUp_OfflineRevenueCount";
         
         // Memory and storage guards
-        private const int MAX_PERSISTED_REVENUE = 50; // Absolute max revenue items to persist (revenue data is larger)
+        private const int MAX_REVENUE_QUEUE_HARD_CAP = 500; // Hard cap for queued revenue items
         private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 10MB - minimum free memory required to persist
 
         public RevenueTrackingService(
@@ -83,6 +83,7 @@ namespace LvlUp.Services
 
             // Add to batch
             _revenueBatch.Add(revenueData);
+            EnforceRevenueQueueCap();
 
             if (_config.enableDebugLogs)
             {
@@ -176,6 +177,11 @@ namespace LvlUp.Services
         /// </summary>
         private bool CanPersistRevenue()
         {
+            if (!_config.persistQueueToDisk)
+            {
+                return false;
+            }
+
             // Check free memory
             long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
             if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
@@ -186,9 +192,9 @@ namespace LvlUp.Services
 
             // Check current persisted revenue count
             int currentPersistedCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
-            if (currentPersistedCount >= MAX_PERSISTED_REVENUE)
+            if (currentPersistedCount >= GetMaxRevenueQueueSize())
             {
-                Debug.LogWarning($"[LvlUp] Max persisted revenue limit reached: {currentPersistedCount}/{MAX_PERSISTED_REVENUE}. Clearing old revenue data.");
+                Debug.LogWarning($"[LvlUp] Max persisted revenue limit reached: {currentPersistedCount}/{GetMaxRevenueQueueSize()}. Clearing old revenue data.");
                 ClearPersistedRevenue();
                 return true; // Continue with fresh slate
             }
@@ -201,8 +207,17 @@ namespace LvlUp.Services
         /// </summary>
         public void PersistRevenue(List<RevenueData> revenue)
         {
-            if (revenue == null || revenue.Count == 0)
+            if (!_config.persistQueueToDisk)
                 return;
+
+            if (revenue == null || revenue.Count == 0)
+            {
+                int previousCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
+                DeleteIndexedPrefRange(PREF_OFFLINE_REVENUE, 0, previousCount);
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
+                PlayerPrefs.Save();
+                return;
+            }
 
             // Check if we can persist (memory and storage guards)
             if (!CanPersistRevenue())
@@ -213,30 +228,25 @@ namespace LvlUp.Services
 
             try
             {
-                int existingCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
-                int maxNewItems = Mathf.Max(0, MAX_PERSISTED_REVENUE - existingCount);
-
-                if (maxNewItems <= 0)
-                {
-                    Debug.LogWarning($"[LvlUp] Revenue storage limit reached. Cannot persist more items.");
-                    return;
-                }
-
-                // Only persist up to the limit
-                int itemsToStore = Mathf.Min(revenue.Count, maxNewItems);
+                int maxQueueSize = GetMaxRevenueQueueSize();
+                int itemsToStore = Mathf.Min(revenue.Count, maxQueueSize);
                 if (itemsToStore < revenue.Count)
                 {
-                    Debug.LogWarning($"[LvlUp] Limiting persisted revenue from {revenue.Count} to {itemsToStore} to prevent memory issues");
+                    Debug.LogWarning($"[LvlUp] Limiting persisted revenue from {revenue.Count} to {itemsToStore} to keep queue bounded");
                 }
+
+                int startIndex = Mathf.Max(0, revenue.Count - itemsToStore);
+                int previousCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
 
                 for (int i = 0; i < itemsToStore; i++)
                 {
-                    string json = JsonUtility.ToJson(revenue[i]);
-                    string key = $"{PREF_OFFLINE_REVENUE}_{existingCount + i}";
+                    string json = JsonUtility.ToJson(revenue[startIndex + i]);
+                    string key = $"{PREF_OFFLINE_REVENUE}_{i}";
                     PlayerPrefs.SetString(key, json);
                 }
 
-                PlayerPrefs.SetInt(PREF_OFFLINE_REVENUE_COUNT, existingCount + itemsToStore);
+                PlayerPrefs.SetInt(PREF_OFFLINE_REVENUE_COUNT, itemsToStore);
+                DeleteIndexedPrefRange(PREF_OFFLINE_REVENUE, itemsToStore, previousCount);
                 PlayerPrefs.Save();
 
                 if (_config.enableDebugLogs)
@@ -253,6 +263,11 @@ namespace LvlUp.Services
         /// </summary>
         public void PersistRevenue()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
+            EnforceRevenueQueueCap();
+
             if (_revenueBatch.Count > 0)
             {
                 PersistRevenue(_revenueBatch);
@@ -264,16 +279,13 @@ namespace LvlUp.Services
         /// </summary>
         private void ClearPersistedRevenue()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
             try
             {
                 int count = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
-                
-                // Delete all persisted items
-                for (int i = 0; i < count; i++)
-                {
-                    string key = $"{PREF_OFFLINE_REVENUE}_{i}";
-                    PlayerPrefs.DeleteKey(key);
-                }
+                DeleteIndexedPrefRange(PREF_OFFLINE_REVENUE, 0, count);
                 
                 // Delete count key
                 PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
@@ -335,9 +347,10 @@ namespace LvlUp.Services
 
                     // Re-queue failed events for retry
                     _revenueBatch.InsertRange(0, batch);
+                    EnforceRevenueQueueCap();
 
                     // Persist to PlayerPrefs for offline support (only on failure)
-                    PersistRevenue(batch);
+                    PersistRevenue(_revenueBatch);
                 }
             });
 
@@ -354,6 +367,9 @@ namespace LvlUp.Services
 
         private void LoadPersistedRevenue()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
             if (_hasLoadedPersistedRevenue)
                 return;
 
@@ -366,9 +382,9 @@ namespace LvlUp.Services
                     return;
 
                 // Safety check: if persisted count is suspiciously high, it might be corrupted
-                if (count > MAX_PERSISTED_REVENUE * 2)
+                if (count > GetMaxRevenueQueueSize() * 2)
                 {
-                    Debug.LogWarning($"[LvlUp] Persisted revenue count ({count}) exceeds safety threshold ({MAX_PERSISTED_REVENUE * 2}). Data may be corrupted. Clearing.");
+                    Debug.LogWarning($"[LvlUp] Persisted revenue count ({count}) exceeds safety threshold ({GetMaxRevenueQueueSize() * 2}). Data may be corrupted. Clearing.");
                     ClearPersistedRevenue();
                     return;
                 }
@@ -425,6 +441,8 @@ namespace LvlUp.Services
 
                 if (loadedCount > 0 && _config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline revenue items" + (skippedCount > 0 ? $" (skipped {skippedCount} corrupted)" : ""));
+
+                EnforceRevenueQueueCap();
             }
             catch (Exception ex)
             {
@@ -440,6 +458,34 @@ namespace LvlUp.Services
                 }
             }
         }
+
+        private int GetMaxRevenueQueueSize()
+        {
+            return Mathf.Max(1, Mathf.Min(_config.maxQueueSize, MAX_REVENUE_QUEUE_HARD_CAP));
+        }
+
+        private void EnforceRevenueQueueCap()
+        {
+            int maxQueueSize = GetMaxRevenueQueueSize();
+            if (_revenueBatch.Count <= maxQueueSize)
+                return;
+
+            int overflow = _revenueBatch.Count - maxQueueSize;
+            _revenueBatch.RemoveRange(0, overflow);
+
+            if (_config.enableDebugLogs)
+                Debug.LogWarning($"[LvlUp] Revenue queue cap reached ({maxQueueSize}). Dropped {overflow} oldest revenue item(s).");
+        }
+
+        private void DeleteIndexedPrefRange(string prefix, int startInclusive, int endExclusive)
+        {
+            if (endExclusive <= startInclusive)
+                return;
+
+            for (int i = startInclusive; i < endExclusive; i++)
+            {
+                PlayerPrefs.DeleteKey($"{prefix}_{i}");
+            }
+        }
     }
 }
-
