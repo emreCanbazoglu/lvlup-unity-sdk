@@ -116,6 +116,8 @@ namespace LvlUp.Services
 
                     // Start heartbeat
                     StartHeartbeat();
+                    // Send one heartbeat immediately so short-lived sessions are observed by backend.
+                    SendHeartbeat();
 
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session started: {_currentSession.sessionId}");
@@ -227,16 +229,22 @@ namespace LvlUp.Services
         {
             if (pauseStatus)
             {
-                // App going to background - stop heartbeat
-                StopHeartbeat();
-                _currentSession = null;
+                // App going to background - stop heartbeat and attempt to close active session.
+                if (_currentSession != null)
+                {
+                    StopHeartbeat();
+                    EndSession(response =>
+                    {
+                        if (_config.enableDebugLogs && !response.success)
+                            Debug.LogWarning($"[LvlUp] Pause-triggered EndSession failed: {response.error}");
+                    });
+                }
             }
             else
             {
                 // App resumed - start new session if we have a user
                 if (!string.IsNullOrEmpty(_currentUserId))
                 {
-                    _sessionNumber++;
                     StartSession(_currentUserId, null);
                 }
             }

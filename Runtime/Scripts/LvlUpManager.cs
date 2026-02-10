@@ -313,6 +313,9 @@ namespace LvlUp
         {
             if (_isInitialized && _sessionManagementService?.GetCurrentSession() != null)
             {
+                // Best-effort close of active session on quit; callback is intentionally ignored.
+                _sessionManagementService.EndSession();
+
                 if (_config.autoTrackAppLifecycle)
                     TrackEvent("app_quit", null);
                 
@@ -987,4 +990,3 @@ namespace LvlUp
         }
     }
 }
-
