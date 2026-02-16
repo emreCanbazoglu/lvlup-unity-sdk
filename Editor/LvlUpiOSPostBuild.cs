@@ -1,7 +1,9 @@
 using System.IO;
 using UnityEditor;
 using UnityEditor.Callbacks;
+#if UNITY_IOS
 using UnityEditor.iOS.Xcode;
+#endif
 using UnityEngine;
 
 namespace LvlUp.Editor
@@ -21,6 +23,9 @@ namespace LvlUp.Editor
         [PostProcessBuild(999)]
         public static void OnPostProcessBuild(BuildTarget target, string projectPath)
         {
+#if !UNITY_IOS
+            return;
+#else
             if (target != BuildTarget.iOS)
                 return;
 
@@ -44,8 +49,10 @@ namespace LvlUp.Editor
 
             File.WriteAllText(plistPath, plist.WriteToString());
             Debug.Log("[LvlUp] Added ATS exception for ip-api.com (GeoLocationService HTTP endpoint).");
+#endif
         }
 
+#if UNITY_IOS
         private static PlistElementDict GetOrCreateDict(PlistElementDict root, string key)
         {
             if (!root.values.TryGetValue(key, out PlistElement element))
@@ -54,5 +61,6 @@ namespace LvlUp.Editor
             PlistElementDict dict = element.AsDict();
             return dict ?? root.CreateDict(key);
         }
+#endif
     }
 }
