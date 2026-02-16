@@ -200,6 +200,9 @@ namespace LvlUp.Services
                     // Failed to end session - add to pending list
                     EnqueuePendingSessionEnd(request);
                     PersistPendingSessions();
+                    // Session close was requested; clear local session state to avoid overlap on next start.
+                    StopHeartbeat();
+                    _currentSession = null;
 
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to end session. Queued for retry. Total pending ends: {_pendingSessionEnds.Count}");
@@ -219,6 +222,13 @@ namespace LvlUp.Services
                     Debug.Log($"[LvlUp] Retrying {_pendingSessionStarts.Count} pending session starts...");
 
                 _coroutineRunner.StartCoroutine(ProcessPendingSessionStarts());
+            }
+            else if (_pendingSessionEnds.Count > 0)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
+
+                _coroutineRunner.StartCoroutine(ProcessPendingSessionEnds());
             }
         }
 
