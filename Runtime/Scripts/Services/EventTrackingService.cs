@@ -28,6 +28,10 @@ namespace LvlUp.Services
 
         // Server limits
         private const int MAX_BATCH_SIZE = 100; // Maximum events per batch allowed by server
+        
+        // Memory and storage guards
+        private const int MAX_HARD_EVENT_QUEUE_CAP = 5000; // Hard safety cap to avoid pathological queue growth
+        private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 10MB - minimum free memory required to persist
 
         // PlayerPrefs keys for persistence
         private const string PREF_OFFLINE_EVENTS = "LvlUp_OfflineEvents";
@@ -89,6 +93,7 @@ namespace LvlUp.Services
             else
             {
                 _eventBatch.Add(lvlUpEvent);
+                EnforceEventQueueCap();
 
                 if (_config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Event queued: {lvlUpEvent.eventName} (Batch size: {_eventBatch.Count}/{_config.eventBatchSize})");
@@ -202,20 +207,85 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Persist events for offline support
+        /// Check if we have enough memory and storage to persist events
+        /// </summary>
+        private bool CanPersistEvents()
+        {
+            if (!_config.persistQueueToDisk)
+            {
+                return false;
+            }
+
+            // Check free memory
+            long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+            if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
+            {
+                Debug.LogWarning($"[LvlUp] Insufficient memory to persist events. Free memory: {freeMemory / (1024 * 1024)}MB, Required: {MAX_MEMORY_FREE_THRESHOLD / (1024 * 1024)}MB");
+                return false;
+            }
+
+            // Check current persisted event count
+            int currentPersistedCount = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
+            if (currentPersistedCount >= GetMaxEventQueueSize())
+            {
+                Debug.LogWarning($"[LvlUp] Max persisted events limit reached: {currentPersistedCount}/{GetMaxEventQueueSize()}. Clearing old events.");
+                ClearPersistedEvents();
+                return true; // Continue with fresh slate
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Clear persisted offline events (called when limit is reached)
+        /// </summary>
+        private void ClearPersistedEvents()
+        {
+            try
+            {
+                int count = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
+                DeleteIndexedPrefRange(PREF_OFFLINE_EVENTS, 0, count);
+                PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENT_COUNT);
+                PlayerPrefs.Save();
+
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Cleared {count} stale offline events to prevent memory bloat");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[LvlUp] Failed to clear persisted events: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Persist events for offline support with memory guards
         /// </summary>
         public void PersistEvents()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
             if (_eventBatch.Count == 0)
             {
-                PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENTS);
+                int previousCount = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
+                DeleteIndexedPrefRange(PREF_OFFLINE_EVENTS, 0, previousCount);
                 PlayerPrefs.DeleteKey(PREF_OFFLINE_EVENT_COUNT);
                 PlayerPrefs.Save();
                 return;
             }
 
+            // Check if we can persist (memory and storage guards)
+            if (!CanPersistEvents())
+            {
+                Debug.LogWarning("[LvlUp] Cannot persist events due to memory/storage constraints. Clearing batch.");
+                _eventBatch.Clear();
+                return;
+            }
+
             try
             {
+                EnforceEventQueueCap();
+
                 var eventsJson = new List<string>();
                 foreach (var evt in _eventBatch)
                 {
@@ -223,11 +293,21 @@ namespace LvlUp.Services
                     eventsJson.Add(json);
                 }
 
+                // Guard: limit persisted events to prevent unbounded growth
+                int maxEventsToStore = Mathf.Min(eventsJson.Count, GetMaxEventQueueSize());
+                if (maxEventsToStore < eventsJson.Count)
+                {
+                    Debug.LogWarning($"[LvlUp] Limiting persisted events from {eventsJson.Count} to {maxEventsToStore} to prevent memory issues");
+                    eventsJson = eventsJson.GetRange(eventsJson.Count - maxEventsToStore, maxEventsToStore);
+                }
+
+                int previousCount = PlayerPrefs.GetInt(PREF_OFFLINE_EVENT_COUNT, 0);
                 PlayerPrefs.SetInt(PREF_OFFLINE_EVENT_COUNT, eventsJson.Count);
                 for (int i = 0; i < eventsJson.Count; i++)
                 {
                     PlayerPrefs.SetString($"{PREF_OFFLINE_EVENTS}_{i}", eventsJson[i]);
                 }
+                DeleteIndexedPrefRange(PREF_OFFLINE_EVENTS, eventsJson.Count, previousCount);
                 PlayerPrefs.Save();
 
                 if (_config.enableDebugLogs)
@@ -236,6 +316,7 @@ namespace LvlUp.Services
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to persist events: {ex.Message}");
+                // Don't lose events - keep them in memory batch even if persistence fails
             }
         }
 
@@ -331,6 +412,9 @@ namespace LvlUp.Services
 
         private void LoadPersistedEvents()
         {
+            if (!_config.persistQueueToDisk)
+                return;
+
             if (_hasLoadedPersistedEvents)
                 return;
 
@@ -342,15 +426,44 @@ namespace LvlUp.Services
                 if (count == 0)
                     return;
 
+                // Safety check: if persisted count is suspiciously high, it might be corrupted
+                if (count > GetMaxEventQueueSize() * 2)
+                {
+                    Debug.LogWarning($"[LvlUp] Persisted event count ({count}) exceeds safety threshold ({GetMaxEventQueueSize() * 2}). Data may be corrupted. Clearing.");
+                    ClearPersistedEvents();
+                    return;
+                }
+
+                // Check free memory before loading
+                long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
+                if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
+                {
+                    Debug.LogWarning($"[LvlUp] Insufficient free memory ({freeMemory / (1024 * 1024)}MB) to load persisted events. Skipping load to prevent crash.");
+                    ClearPersistedEvents();
+                    return;
+                }
+
                 int loadedCount = 0;
+                int skippedCount = 0;
+                
                 for (int i = 0; i < count; i++)
                 {
                     string key = $"{PREF_OFFLINE_EVENTS}_{i}";
                     if (PlayerPrefs.HasKey(key))
                     {
-                        string json = PlayerPrefs.GetString(key);
                         try
                         {
+                            string json = PlayerPrefs.GetString(key);
+                            
+                            // Sanity check: JSON string shouldn't be unreasonably large
+                            if (json.Length > 50000) // 50KB per event is unreasonable
+                            {
+                                Debug.LogWarning($"[LvlUp] Event {i} data suspiciously large ({json.Length} bytes). Skipping to prevent memory issues.");
+                                skippedCount++;
+                                PlayerPrefs.DeleteKey(key);
+                                continue;
+                            }
+                            
                             var evt = JsonUtility.FromJson<LvlUpEvent>(json);
                             if (evt != null)
                             {
@@ -361,6 +474,7 @@ namespace LvlUp.Services
                         catch (Exception ex)
                         {
                             Debug.LogWarning($"[LvlUp] Failed to deserialize event {i}: {ex.Message}");
+                            skippedCount++;
                         }
 
                         PlayerPrefs.DeleteKey(key);
@@ -371,13 +485,52 @@ namespace LvlUp.Services
                 PlayerPrefs.Save();
 
                 if (loadedCount > 0 && _config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline events");
+                    Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline events" + (skippedCount > 0 ? $" (skipped {skippedCount} corrupted)" : ""));
+
+                EnforceEventQueueCap();
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to load persisted events: {ex.Message}");
+                // Clear potentially corrupted data
+                try
+                {
+                    ClearPersistedEvents();
+                }
+                catch (Exception clearEx)
+                {
+                    Debug.LogWarning($"[LvlUp] Failed to clear corrupted events: {clearEx.Message}");
+                }
+            }
+        }
+
+        private int GetMaxEventQueueSize()
+        {
+            return Mathf.Max(1, Mathf.Min(_config.maxQueueSize, MAX_HARD_EVENT_QUEUE_CAP));
+        }
+
+        private void EnforceEventQueueCap()
+        {
+            int maxQueueSize = GetMaxEventQueueSize();
+            if (_eventBatch.Count <= maxQueueSize)
+                return;
+
+            int overflow = _eventBatch.Count - maxQueueSize;
+            _eventBatch.RemoveRange(0, overflow);
+
+            if (_config.enableDebugLogs)
+                Debug.LogWarning($"[LvlUp] Event queue cap reached ({maxQueueSize}). Dropped {overflow} oldest event(s).");
+        }
+
+        private void DeleteIndexedPrefRange(string prefix, int startInclusive, int endExclusive)
+        {
+            if (endExclusive <= startInclusive)
+                return;
+
+            for (int i = startInclusive; i < endExclusive; i++)
+            {
+                PlayerPrefs.DeleteKey($"{prefix}_{i}");
             }
         }
     }
 }
-
