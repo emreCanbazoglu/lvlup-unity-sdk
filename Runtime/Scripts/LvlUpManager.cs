@@ -311,20 +311,22 @@ namespace LvlUp
 
         private void OnApplicationQuit()
         {
-            if (_isInitialized && _sessionManagementService?.GetCurrentSession() != null)
+            if (!_isInitialized)
+                return;
+
+            var hasActiveSession = _sessionManagementService?.GetCurrentSession() != null;
+
+            if (hasActiveSession && _config.autoTrackAppLifecycle)
+                TrackEvent("app_quit", null);
+
+            // Best-effort session close: queue an end request for next launch if quit happens too fast.
+            _sessionManagementService?.HandleApplicationQuit();
+
+            if (hasActiveSession)
             {
-                // Best-effort close of active session on quit; callback is intentionally ignored.
-                _sessionManagementService.EndSession();
-
-                if (_config.autoTrackAppLifecycle)
-                    TrackEvent("app_quit", null);
-                
-                // Best-effort session close: queue an end request for next launch if quit happens too fast.
-                _sessionManagementService?.HandleApplicationQuit();
-
                 // Persist events and revenue before quitting
                 _eventTrackingService?.PersistEvents();
-                
+
                 FlushEventQueue();
                 FlushRevenueQueue();
             }
