@@ -316,6 +316,9 @@ namespace LvlUp
                 if (_config.autoTrackAppLifecycle)
                     TrackEvent("app_quit", null);
                 
+                // Best-effort session close: queue an end request for next launch if quit happens too fast.
+                _sessionManagementService?.HandleApplicationQuit();
+
                 // Persist events and revenue before quitting
                 _eventTrackingService?.PersistEvents();
                 

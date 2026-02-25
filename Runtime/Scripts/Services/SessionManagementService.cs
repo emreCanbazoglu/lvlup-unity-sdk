@@ -33,7 +33,12 @@ namespace LvlUp.Services
         // Heartbeat tracking
         private Coroutine _heartbeatCoroutine;
         private float _lastHeartbeatTime;
+        private bool _heartbeatRequestInFlight;
+        private int _consecutiveHeartbeatFailures;
+        private DateTime? _pausedAtUtc;
+        private static readonly float[] HEARTBEAT_RETRY_DELAYS = new float[] { 2f, 5f };
         private const float HEARTBEAT_INTERVAL = 30f;
+        private const float RESUME_EXISTING_SESSION_GRACE_SECONDS = 150f;
 
         // PlayerPrefs keys
         private const string PREF_SESSION_NUMBER = "LvlUp_SessionNumber";
@@ -105,8 +110,8 @@ namespace LvlUp.Services
 
                     _onSessionIdChanged?.Invoke(_currentSession.sessionId);
 
-                    // Start heartbeat
-                    StartHeartbeat();
+                    // Start heartbeat and send an immediate ping to reduce the first-gap window
+                    StartHeartbeat(sendImmediately: true);
 
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session started: {_currentSession.sessionId}");
@@ -218,17 +223,30 @@ namespace LvlUp.Services
         {
             if (pauseStatus)
             {
-                // App going to background - stop heartbeat
+                // App going to background - stop heartbeat but keep session metadata.
+                // This allows short pauses/resumes without forcing a new session.
+                _pausedAtUtc = DateTime.UtcNow;
                 StopHeartbeat();
-                _currentSession = null;
             }
             else
             {
-                // App resumed - start new session if we have a user
+                var pausedForSeconds = _pausedAtUtc.HasValue
+                    ? (float)(DateTime.UtcNow - _pausedAtUtc.Value).TotalSeconds
+                    : 0f;
+                _pausedAtUtc = null;
+
+                // Short pause: resume same session and send an immediate heartbeat.
+                if (_currentSession != null && pausedForSeconds <= RESUME_EXISTING_SESSION_GRACE_SECONDS)
+                {
+                    StartHeartbeat(sendImmediately: true);
+                    return;
+                }
+
+                // Long pause: let backend timeout the old session and create a new one on resume.
                 if (!string.IsNullOrEmpty(_currentUserId))
                 {
-                    _sessionNumber++;
-                    StartSession(_currentUserId, null);
+                    _currentSession = null;
+                    StartSession(_currentUserId, _currentUserMetadata);
                 }
             }
         }
@@ -271,7 +289,7 @@ namespace LvlUp.Services
             }
         }
 
-        private void StartHeartbeat()
+        private void StartHeartbeat(bool sendImmediately = false)
         {
             StopHeartbeat();
 
@@ -282,6 +300,11 @@ namespace LvlUp.Services
 
                 if (_config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Heartbeat started for session: {_currentSession.sessionId}");
+
+                if (sendImmediately)
+                {
+                    SendHeartbeat();
+                }
             }
         }
 
@@ -318,6 +341,13 @@ namespace LvlUp.Services
             if (_currentSession == null)
                 return;
 
+            if (_heartbeatRequestInFlight)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.LogWarning("[LvlUp] Skipping heartbeat tick because a previous heartbeat request is still in flight");
+                return;
+            }
+
             string sessionId = _currentSession.sessionId;
             string endpoint = $"analytics/sessions/{sessionId}/heartbeat";
 
@@ -329,21 +359,82 @@ namespace LvlUp.Services
                     : (string)null
             };
 
-            _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, heartbeatData, response =>
+            _coroutineRunner.StartCoroutine(SendHeartbeatWithRetryCoroutine(sessionId, endpoint, heartbeatData));
+        }
+
+        private IEnumerator SendHeartbeatWithRetryCoroutine(string sessionId, string endpoint, object heartbeatData)
+        {
+            _heartbeatRequestInFlight = true;
+
+            try
             {
-                if (response.success)
+                for (int attempt = 0; attempt <= HEARTBEAT_RETRY_DELAYS.Length; attempt++)
                 {
-                    _lastHeartbeatTime = Time.realtimeSinceStartup;
+                    ApiResponse<object> heartbeatResponse = null;
+
+                    yield return _httpClient.Post<object>(endpoint, heartbeatData, response =>
+                    {
+                        heartbeatResponse = response;
+                    });
+
+                    // Session changed while request was in flight; ignore stale heartbeat result.
+                    if (_currentSession == null || _currentSession.sessionId != sessionId)
+                    {
+                        yield break;
+                    }
+
+                    if (heartbeatResponse != null && heartbeatResponse.success)
+                    {
+                        _lastHeartbeatTime = Time.realtimeSinceStartup;
+                        _consecutiveHeartbeatFailures = 0;
+
+                        if (_config.enableDebugLogs)
+                            Debug.Log($"[LvlUp] Heartbeat sent for session: {sessionId}");
+
+                        yield break;
+                    }
+
+                    _consecutiveHeartbeatFailures++;
 
                     if (_config.enableDebugLogs)
-                        Debug.Log($"[LvlUp] Heartbeat sent for session: {sessionId}");
+                        Debug.LogWarning($"[LvlUp] Heartbeat failed (attempt {attempt + 1}/{HEARTBEAT_RETRY_DELAYS.Length + 1}): {heartbeatResponse?.error}");
+
+                    if (attempt < HEARTBEAT_RETRY_DELAYS.Length)
+                    {
+                        yield return new WaitForSecondsRealtime(HEARTBEAT_RETRY_DELAYS[attempt]);
+                    }
                 }
-                else
-                {
-                    if (_config.enableDebugLogs)
-                        Debug.LogWarning($"[LvlUp] Heartbeat failed: {response.error}");
-                }
-            }));
+            }
+            finally
+            {
+                _heartbeatRequestInFlight = false;
+            }
+        }
+
+        public void HandleApplicationQuit()
+        {
+            StopHeartbeat();
+
+            if (_currentSession == null && !_hasOfflineSession)
+                return;
+
+            var request = new SessionEndRequest
+            {
+                sessionId = _currentSession?.sessionId,
+                sessionNum = _sessionNumber
+            };
+
+            var geoData = _getGeoData();
+            if (_config.enableGeoTracking && geoData != null)
+            {
+                request.SetGeoLocation(geoData.countryCode);
+            }
+
+            _pendingSessionEnds.Add(request);
+            PersistPendingSessions();
+
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Queued session end on quit for session: {request.sessionId}");
         }
 
         private void PersistPendingSessions()
