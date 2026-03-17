@@ -33,6 +33,7 @@ namespace LvlUp.Services
         // Heartbeat tracking
         private Coroutine _heartbeatCoroutine;
         private float _lastHeartbeatTime;
+        private float _pauseTimestamp;
         private const float HEARTBEAT_INTERVAL = 30f;
 
         // PlayerPrefs keys
@@ -239,23 +240,28 @@ namespace LvlUp.Services
         {
             if (pauseStatus)
             {
-                // App going to background - stop heartbeat and attempt to close active session.
-                if (_currentSession != null)
-                {
-                    StopHeartbeat();
-                    EndSession(response =>
-                    {
-                        if (_config.enableDebugLogs && !response.success)
-                            Debug.LogWarning($"[LvlUp] Pause-triggered EndSession failed: {response.error}");
-                    });
-                }
+                _pauseTimestamp = Time.realtimeSinceStartup;
+                StopHeartbeat();
             }
             else
             {
-                // App resumed - start new session if we have a user
+                float backgroundDuration = Time.realtimeSinceStartup - _pauseTimestamp;
+
+                if (backgroundDuration < _config.sessionTimeoutSeconds && _currentSession != null)
+                {
+                    StartHeartbeat();
+                    SendHeartbeat();
+                    return;
+                }
+
                 if (!string.IsNullOrEmpty(_currentUserId))
                 {
-                    StartSession(_currentUserId, null);
+                    if (_currentSession != null)
+                    {
+                        EndSession();
+                    }
+
+                    StartSession(_currentUserId, _currentUserMetadata);
                 }
             }
         }

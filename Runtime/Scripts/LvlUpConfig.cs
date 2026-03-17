@@ -51,6 +51,11 @@ namespace LvlUp
         public bool autoTrackAppLifecycle = true;
 
         /// <summary>
+        /// Controls how long the app can stay in background before starting a new session on resume.
+        /// </summary>
+        public float sessionTimeoutSeconds = 300f;
+
+        /// <summary>
         /// Enable automatic geographic location tracking using IP geolocation
         /// Fetches location data on initialization and caches for 1 hour
         /// </summary>
