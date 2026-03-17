@@ -33,8 +33,12 @@ namespace LvlUp.Services
         // Heartbeat tracking
         private Coroutine _heartbeatCoroutine;
         private float _lastHeartbeatTime;
-        private float _pauseTimestamp;
+        private bool _heartbeatRequestInFlight;
+        private int _consecutiveHeartbeatFailures;
+        private DateTime? _pausedAtUtc;
+        private static readonly float[] HEARTBEAT_RETRY_DELAYS = new float[] { 2f, 5f };
         private const float HEARTBEAT_INTERVAL = 30f;
+        private const float RESUME_EXISTING_SESSION_GRACE_SECONDS = 150f;
 
         // PlayerPrefs keys
         private const string PREF_SESSION_NUMBER = "LvlUp_SessionNumber";
@@ -42,8 +46,6 @@ namespace LvlUp.Services
         private const string PREF_PENDING_SESSION_START_COUNT = "LvlUp_PendingSessionStartCount";
         private const string PREF_PENDING_SESSION_ENDS = "LvlUp_PendingSessionEnds";
         private const string PREF_PENDING_SESSION_END_COUNT = "LvlUp_PendingSessionEndCount";
-        private const int MAX_PENDING_SESSION_STARTS_HARD_CAP = 500;
-        private const int MAX_PENDING_SESSION_ENDS_HARD_CAP = 500;
 
         public SessionManagementService(
             LvlUpHttpClient httpClient,
@@ -80,16 +82,9 @@ namespace LvlUp.Services
             _onUserIdChanged?.Invoke(_currentUserId);
 
             // Increment session number
-            if (_config.persistQueueToDisk)
-            {
-                _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
-                PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
-                PlayerPrefs.Save();
-            }
-            else
-            {
-                _sessionNumber += 1;
-            }
+            _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
+            PlayerPrefs.SetInt(PREF_SESSION_NUMBER, _sessionNumber);
+            PlayerPrefs.Save();
 
             var request = new SessionStartRequest
             {
@@ -115,10 +110,8 @@ namespace LvlUp.Services
 
                     _onSessionIdChanged?.Invoke(_currentSession.sessionId);
 
-                    // Start heartbeat
-                    StartHeartbeat();
-                    // Send one heartbeat immediately so short-lived sessions are observed by backend.
-                    SendHeartbeat();
+                    // Start heartbeat and send an immediate ping to reduce the first-gap window
+                    StartHeartbeat(sendImmediately: true);
 
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session started: {_currentSession.sessionId}");
@@ -126,7 +119,7 @@ namespace LvlUp.Services
                 else
                 {
                     // Failed to start session (likely offline)
-                    EnqueuePendingSessionStart(request);
+                    _pendingSessionStarts.Add(request);
                     _hasOfflineSession = true;
 
                     PersistPendingSessions();
@@ -167,7 +160,7 @@ namespace LvlUp.Services
             // If we have an offline session, just store the end request
             if (_hasOfflineSession && _currentSession == null)
             {
-                EnqueuePendingSessionEnd(request);
+                _pendingSessionEnds.Add(request);
                 PersistPendingSessions();
 
                 if (_config.enableDebugLogs)
@@ -199,11 +192,8 @@ namespace LvlUp.Services
                 else
                 {
                     // Failed to end session - add to pending list
-                    EnqueuePendingSessionEnd(request);
+                    _pendingSessionEnds.Add(request);
                     PersistPendingSessions();
-                    // Session close was requested; clear local session state to avoid overlap on next start.
-                    StopHeartbeat();
-                    _currentSession = null;
 
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to end session. Queued for retry. Total pending ends: {_pendingSessionEnds.Count}");
@@ -224,13 +214,6 @@ namespace LvlUp.Services
 
                 _coroutineRunner.StartCoroutine(ProcessPendingSessionStarts());
             }
-            else if (_pendingSessionEnds.Count > 0)
-            {
-                if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
-
-                _coroutineRunner.StartCoroutine(ProcessPendingSessionEnds());
-            }
         }
 
         /// <summary>
@@ -240,27 +223,29 @@ namespace LvlUp.Services
         {
             if (pauseStatus)
             {
-                _pauseTimestamp = Time.realtimeSinceStartup;
+                // App going to background - stop heartbeat but keep session metadata.
+                // This allows short pauses/resumes without forcing a new session.
+                _pausedAtUtc = DateTime.UtcNow;
                 StopHeartbeat();
             }
             else
             {
-                float backgroundDuration = Time.realtimeSinceStartup - _pauseTimestamp;
+                var pausedForSeconds = _pausedAtUtc.HasValue
+                    ? (float)(DateTime.UtcNow - _pausedAtUtc.Value).TotalSeconds
+                    : 0f;
+                _pausedAtUtc = null;
 
-                if (backgroundDuration < _config.sessionTimeoutSeconds && _currentSession != null)
+                // Short pause: resume same session and send an immediate heartbeat.
+                if (_currentSession != null && pausedForSeconds <= RESUME_EXISTING_SESSION_GRACE_SECONDS)
                 {
-                    StartHeartbeat();
-                    SendHeartbeat();
+                    StartHeartbeat(sendImmediately: true);
                     return;
                 }
 
+                // Long pause: let backend timeout the old session and create a new one on resume.
                 if (!string.IsNullOrEmpty(_currentUserId))
                 {
-                    if (_currentSession != null)
-                    {
-                        EndSession();
-                    }
-
+                    _currentSession = null;
                     StartSession(_currentUserId, _currentUserMetadata);
                 }
             }
@@ -304,7 +289,7 @@ namespace LvlUp.Services
             }
         }
 
-        private void StartHeartbeat()
+        private void StartHeartbeat(bool sendImmediately = false)
         {
             StopHeartbeat();
 
@@ -315,6 +300,11 @@ namespace LvlUp.Services
 
                 if (_config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Heartbeat started for session: {_currentSession.sessionId}");
+
+                if (sendImmediately)
+                {
+                    SendHeartbeat();
+                }
             }
         }
 
@@ -351,6 +341,13 @@ namespace LvlUp.Services
             if (_currentSession == null)
                 return;
 
+            if (_heartbeatRequestInFlight)
+            {
+                if (_config.enableDebugLogs)
+                    Debug.LogWarning("[LvlUp] Skipping heartbeat tick because a previous heartbeat request is still in flight");
+                return;
+            }
+
             string sessionId = _currentSession.sessionId;
             string endpoint = $"analytics/sessions/{sessionId}/heartbeat";
 
@@ -362,35 +359,88 @@ namespace LvlUp.Services
                     : (string)null
             };
 
-            _coroutineRunner.StartCoroutine(_httpClient.Post<object>(endpoint, heartbeatData, response =>
+            _coroutineRunner.StartCoroutine(SendHeartbeatWithRetryCoroutine(sessionId, endpoint, heartbeatData));
+        }
+
+        private IEnumerator SendHeartbeatWithRetryCoroutine(string sessionId, string endpoint, object heartbeatData)
+        {
+            _heartbeatRequestInFlight = true;
+
+            try
             {
-                if (response.success)
+                for (int attempt = 0; attempt <= HEARTBEAT_RETRY_DELAYS.Length; attempt++)
                 {
-                    _lastHeartbeatTime = Time.realtimeSinceStartup;
+                    ApiResponse<object> heartbeatResponse = null;
+
+                    yield return _httpClient.Post<object>(endpoint, heartbeatData, response =>
+                    {
+                        heartbeatResponse = response;
+                    });
+
+                    // Session changed while request was in flight; ignore stale heartbeat result.
+                    if (_currentSession == null || _currentSession.sessionId != sessionId)
+                    {
+                        yield break;
+                    }
+
+                    if (heartbeatResponse != null && heartbeatResponse.success)
+                    {
+                        _lastHeartbeatTime = Time.realtimeSinceStartup;
+                        _consecutiveHeartbeatFailures = 0;
+
+                        if (_config.enableDebugLogs)
+                            Debug.Log($"[LvlUp] Heartbeat sent for session: {sessionId}");
+
+                        yield break;
+                    }
+
+                    _consecutiveHeartbeatFailures++;
 
                     if (_config.enableDebugLogs)
-                        Debug.Log($"[LvlUp] Heartbeat sent for session: {sessionId}");
+                        Debug.LogWarning($"[LvlUp] Heartbeat failed (attempt {attempt + 1}/{HEARTBEAT_RETRY_DELAYS.Length + 1}): {heartbeatResponse?.error}");
+
+                    if (attempt < HEARTBEAT_RETRY_DELAYS.Length)
+                    {
+                        yield return new WaitForSecondsRealtime(HEARTBEAT_RETRY_DELAYS[attempt]);
+                    }
                 }
-                else
-                {
-                    if (_config.enableDebugLogs)
-                        Debug.LogWarning($"[LvlUp] Heartbeat failed: {response.error}");
-                }
-            }));
+            }
+            finally
+            {
+                _heartbeatRequestInFlight = false;
+            }
+        }
+
+        public void HandleApplicationQuit()
+        {
+            StopHeartbeat();
+
+            if (_currentSession == null && !_hasOfflineSession)
+                return;
+
+            var request = new SessionEndRequest
+            {
+                sessionId = _currentSession?.sessionId,
+                sessionNum = _sessionNumber
+            };
+
+            var geoData = _getGeoData();
+            if (_config.enableGeoTracking && geoData != null)
+            {
+                request.SetGeoLocation(geoData.countryCode);
+            }
+
+            _pendingSessionEnds.Add(request);
+            PersistPendingSessions();
+
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Queued session end on quit for session: {request.sessionId}");
         }
 
         private void PersistPendingSessions()
         {
-            if (!_config.persistQueueToDisk)
-                return;
-
             try
             {
-                EnforcePendingQueueCaps();
-
-                int previousStartCount = PlayerPrefs.GetInt(PREF_PENDING_SESSION_START_COUNT, 0);
-                int previousEndCount = PlayerPrefs.GetInt(PREF_PENDING_SESSION_END_COUNT, 0);
-
                 // Persist session starts
                 PlayerPrefs.SetInt(PREF_PENDING_SESSION_START_COUNT, _pendingSessionStarts.Count);
                 for (int i = 0; i < _pendingSessionStarts.Count; i++)
@@ -398,7 +448,6 @@ namespace LvlUp.Services
                     string json = JsonUtility.ToJson(_pendingSessionStarts[i]);
                     PlayerPrefs.SetString($"{PREF_PENDING_SESSION_STARTS}_{i}", json);
                 }
-                DeleteIndexedPrefRange(PREF_PENDING_SESSION_STARTS, _pendingSessionStarts.Count, previousStartCount);
 
                 // Persist session ends
                 PlayerPrefs.SetInt(PREF_PENDING_SESSION_END_COUNT, _pendingSessionEnds.Count);
@@ -407,7 +456,6 @@ namespace LvlUp.Services
                     string json = JsonUtility.ToJson(_pendingSessionEnds[i]);
                     PlayerPrefs.SetString($"{PREF_PENDING_SESSION_ENDS}_{i}", json);
                 }
-                DeleteIndexedPrefRange(PREF_PENDING_SESSION_ENDS, _pendingSessionEnds.Count, previousEndCount);
 
                 PlayerPrefs.Save();
 
@@ -422,9 +470,6 @@ namespace LvlUp.Services
 
         private void LoadPendingSessions()
         {
-            if (!_config.persistQueueToDisk)
-                return;
-
             try
             {
                 // Load pending session starts
@@ -440,7 +485,7 @@ namespace LvlUp.Services
                             var request = JsonUtility.FromJson<SessionStartRequest>(json);
                             if (request != null)
                             {
-                                EnqueuePendingSessionStart(request);
+                                _pendingSessionStarts.Add(request);
                             }
                         }
                         catch (Exception ex)
@@ -465,7 +510,7 @@ namespace LvlUp.Services
                             var request = JsonUtility.FromJson<SessionEndRequest>(json);
                             if (request != null)
                             {
-                                EnqueuePendingSessionEnd(request);
+                                _pendingSessionEnds.Add(request);
                             }
                         }
                         catch (Exception ex)
@@ -492,71 +537,6 @@ namespace LvlUp.Services
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to load pending sessions: {ex.Message}");
-            }
-        }
-
-        private int GetPendingSessionStartsCap()
-        {
-            return Mathf.Max(1, Mathf.Min(_config.maxQueueSize, MAX_PENDING_SESSION_STARTS_HARD_CAP));
-        }
-
-        private int GetPendingSessionEndsCap()
-        {
-            return Mathf.Max(1, Mathf.Min(_config.maxQueueSize, MAX_PENDING_SESSION_ENDS_HARD_CAP));
-        }
-
-        private void EnforcePendingQueueCaps()
-        {
-            TrimPendingStartsToCap();
-            TrimPendingEndsToCap();
-        }
-
-        private void EnqueuePendingSessionStart(SessionStartRequest request)
-        {
-            _pendingSessionStarts.Add(request);
-            TrimPendingStartsToCap();
-        }
-
-        private void EnqueuePendingSessionEnd(SessionEndRequest request)
-        {
-            _pendingSessionEnds.Add(request);
-            TrimPendingEndsToCap();
-        }
-
-        private void TrimPendingStartsToCap()
-        {
-            int cap = GetPendingSessionStartsCap();
-            if (_pendingSessionStarts.Count <= cap)
-                return;
-
-            int overflow = _pendingSessionStarts.Count - cap;
-            _pendingSessionStarts.RemoveRange(0, overflow);
-
-            if (_config.enableDebugLogs)
-                Debug.LogWarning($"[LvlUp] Pending session start queue cap reached ({cap}). Dropped {overflow} oldest item(s).");
-        }
-
-        private void TrimPendingEndsToCap()
-        {
-            int cap = GetPendingSessionEndsCap();
-            if (_pendingSessionEnds.Count <= cap)
-                return;
-
-            int overflow = _pendingSessionEnds.Count - cap;
-            _pendingSessionEnds.RemoveRange(0, overflow);
-
-            if (_config.enableDebugLogs)
-                Debug.LogWarning($"[LvlUp] Pending session end queue cap reached ({cap}). Dropped {overflow} oldest item(s).");
-        }
-
-        private void DeleteIndexedPrefRange(string prefix, int startInclusive, int endExclusive)
-        {
-            if (endExclusive <= startInclusive)
-                return;
-
-            for (int i = startInclusive; i < endExclusive; i++)
-            {
-                PlayerPrefs.DeleteKey($"{prefix}_{i}");
             }
         }
 
@@ -677,3 +657,4 @@ namespace LvlUp.Services
         }
     }
 }
+
