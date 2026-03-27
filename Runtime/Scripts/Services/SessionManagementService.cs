@@ -113,6 +113,9 @@ namespace LvlUp.Services
                     // Start heartbeat and send an immediate ping to reduce the first-gap window
                     StartHeartbeat(sendImmediately: true);
 
+                    // Retry any pending ends from previous sessions (e.g. D0 end queued from HandleApplicationQuit)
+                    RetryPendingSessions();
+
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session started: {_currentSession.sessionId}");
                 }
@@ -213,6 +216,14 @@ namespace LvlUp.Services
                     Debug.Log($"[LvlUp] Retrying {_pendingSessionStarts.Count} pending session starts...");
 
                 _coroutineRunner.StartCoroutine(ProcessPendingSessionStarts());
+            }
+            else if (_pendingSessionEnds.Count > 0)
+            {
+                // No pending starts but there are pending ends (e.g. previous session end queued from HandleApplicationQuit)
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
+
+                _coroutineRunner.StartCoroutine(ProcessPendingSessionEnds());
             }
         }
 
