@@ -29,6 +29,8 @@ namespace LvlUp.Services
         private List<SessionStartRequest> _pendingSessionStarts = new List<SessionStartRequest>();
         private List<SessionEndRequest> _pendingSessionEnds = new List<SessionEndRequest>();
         private bool _hasOfflineSession = false;
+        private bool _isProcessingSessionStarts = false;
+        private bool _isProcessingSessionEnds = false;
 
         // Heartbeat tracking
         private Coroutine _heartbeatCoroutine;
@@ -212,6 +214,13 @@ namespace LvlUp.Services
         {
             if (_pendingSessionStarts.Count > 0)
             {
+                if (_isProcessingSessionStarts)
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log("[LvlUp] Session start retry already in progress, skipping.");
+                    return;
+                }
+
                 if (_config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Retrying {_pendingSessionStarts.Count} pending session starts...");
 
@@ -219,6 +228,13 @@ namespace LvlUp.Services
             }
             else if (_pendingSessionEnds.Count > 0)
             {
+                if (_isProcessingSessionEnds)
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log("[LvlUp] Session end retry already in progress, skipping.");
+                    return;
+                }
+
                 // No pending starts but there are pending ends (e.g. previous session end queued from HandleApplicationQuit)
                 if (_config.enableDebugLogs)
                     Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
@@ -553,6 +569,8 @@ namespace LvlUp.Services
 
         private IEnumerator ProcessPendingSessionStarts()
         {
+            _isProcessingSessionStarts = true;
+
             while (_pendingSessionStarts.Count > 0)
             {
                 var request = _pendingSessionStarts[0];
@@ -580,26 +598,40 @@ namespace LvlUp.Services
 
                 if (success)
                 {
-                    _pendingSessionStarts.RemoveAt(0);
-                    PersistPendingSessions();
+                    if (_pendingSessionStarts.Count > 0)
+                    {
+                        _pendingSessionStarts.RemoveAt(0);
+                        PersistPendingSessions();
+                    }
                 }
                 else
                 {
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Stopping session retry - still offline. {_pendingSessionStarts.Count} sessions remain queued.");
+                    _isProcessingSessionStarts = false;
                     yield break;
                 }
 
                 yield return new WaitForSeconds(0.5f);
             }
 
+            _isProcessingSessionStarts = false;
+
             // Process session ends after starts
             if (_pendingSessionEnds.Count > 0)
             {
-                if (_config.enableDebugLogs)
-                    Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
+                if (_isProcessingSessionEnds)
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log("[LvlUp] Session end retry already in progress, skipping chained start.");
+                }
+                else
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Retrying {_pendingSessionEnds.Count} pending session ends...");
 
-                _coroutineRunner.StartCoroutine(ProcessPendingSessionEnds());
+                    _coroutineRunner.StartCoroutine(ProcessPendingSessionEnds());
+                }
             }
 
             if (_pendingSessionStarts.Count == 0 && _pendingSessionEnds.Count == 0)
@@ -610,6 +642,8 @@ namespace LvlUp.Services
 
         private IEnumerator ProcessPendingSessionEnds()
         {
+            _isProcessingSessionEnds = true;
+
             while (_pendingSessionEnds.Count > 0)
             {
                 var request = _pendingSessionEnds[0];
@@ -648,18 +682,24 @@ namespace LvlUp.Services
 
                 if (success)
                 {
-                    _pendingSessionEnds.RemoveAt(0);
-                    PersistPendingSessions();
+                    if (_pendingSessionEnds.Count > 0)
+                    {
+                        _pendingSessionEnds.RemoveAt(0);
+                        PersistPendingSessions();
+                    }
                 }
                 else
                 {
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Stopping session end retry. {_pendingSessionEnds.Count} session ends remain queued.");
+                    _isProcessingSessionEnds = false;
                     yield break;
                 }
 
                 yield return new WaitForSeconds(0.5f);
             }
+
+            _isProcessingSessionEnds = false;
 
             if (_pendingSessionStarts.Count == 0 && _pendingSessionEnds.Count == 0)
             {
