@@ -36,6 +36,11 @@ namespace LvlUp.Services
         private const int MAX_REVENUE_QUEUE_HARD_CAP = 500; // Hard cap for queued revenue items
         private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 10MB - minimum free memory required to persist
 
+        // Transaction deduplication — prevents double-tracking when both
+        // TrackPurchase() and manual TrackInAppPurchase() are called for the same purchase.
+        private readonly HashSet<string> _recentTransactionIds = new HashSet<string>();
+        private const int MAX_DEDUP_ENTRIES = 200;
+
         public RevenueTrackingService(
             LvlUpHttpClient httpClient,
             LvlUpConfig config,
@@ -76,6 +81,27 @@ namespace LvlUp.Services
                 Debug.LogError("[LvlUp] RevenueData cannot be null");
                 callback?.Invoke(new ApiResponse { success = false, error = "RevenueData cannot be null" });
                 return;
+            }
+
+            // Deduplicate IAP by transactionId — prevents double-tracking when both
+            // TrackPurchase() and manual TrackInAppPurchase() are called for the same purchase.
+            if (revenueData.revenueType == "IN_APP_PURCHASE" && !string.IsNullOrEmpty(revenueData.transactionId))
+            {
+                if (_recentTransactionIds.Contains(revenueData.transactionId))
+                {
+                    if (_config.enableDebugLogs)
+                        Debug.Log($"[LvlUp] Duplicate IAP skipped (transactionId: {revenueData.transactionId})");
+                    callback?.Invoke(new ApiResponse { success = true, message = "Duplicate skipped" });
+                    return;
+                }
+
+                _recentTransactionIds.Add(revenueData.transactionId);
+
+                // Evict oldest entries when the set gets too large
+                if (_recentTransactionIds.Count > MAX_DEDUP_ENTRIES)
+                {
+                    _recentTransactionIds.Clear();
+                }
             }
 
             // Populate context from current session and metadata

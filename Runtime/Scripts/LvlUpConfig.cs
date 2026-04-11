@@ -77,6 +77,14 @@ namespace LvlUp
         public bool enableCrashReporting = true;
 
         /// <summary>
+        /// Automatically track Unity IAP purchases when com.unity.purchasing is installed.
+        /// When enabled, use LvlUpSDK.Revenue.TrackPurchase(product) in ProcessPurchase()
+        /// for automatic field extraction from the Unity Product object.
+        /// Duplicate transactions are automatically deduplicated by transactionId.
+        /// </summary>
+        public bool autoTrackIAP = true;
+
+        /// <summary>
         /// Level funnel name for tracking different level design iterations
         /// Example: "live_v1", "live_v2", "test_hard"
         /// This helps compare performance between different level layouts/designs

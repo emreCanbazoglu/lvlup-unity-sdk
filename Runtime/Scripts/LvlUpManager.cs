@@ -136,7 +136,14 @@ namespace LvlUp
             // Initialize Remote Config Service with environment from config
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
             _adMonetizationService.Initialize(_revenueTrackingService.TrackAdImpression);
-            
+
+            // Initialize Unity IAP auto-capture if enabled and package is installed
+            if (_config.autoTrackIAP)
+            {
+                LvlUp.IAPIntegration.UnityIAPIntegration.Initialize(
+                    _revenueTrackingService.TrackInAppPurchase);
+            }
+
             // Initialize other services
             _sessionManagementService.Initialize();
             _eventTrackingService.Initialize();

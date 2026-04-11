@@ -5,9 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2026-01-14
+## [1.1.0] - 2026-04-11
 
 ### Added
+- **Unity IAP Auto-Capture**: Automatically track in-app purchases from Unity's IAP package
+  - `LvlUpSDK.Revenue.TrackPurchase(product)` — one-line IAP tracking in `ProcessPurchase()`
+  - Auto-extracts productId, price, currency, transactionId, store, and product type from Unity's `Product` object
+  - Conditionally compiled via `lvlup_iap_enabled` define (auto-set when `com.unity.purchasing` is installed)
+  - `autoTrackIAP` config flag (default: `true`) to enable/disable
+  - Client-side transaction deduplication by `transactionId` — safe to use alongside manual `TrackInAppPurchase()` calls
 - **Level Funnel Tracking**: A/B test and track different level design iterations
   - `levelFunnel` field in `LvlUpConfig` for setting global funnel name (e.g., "live_v1", "test_hard")
   - `levelFunnelVersion` field in `LvlUpConfig` for tracking design version numbers

@@ -419,6 +419,30 @@ namespace LvlUp
             }
 
             /// <summary>
+            /// Track a Unity IAP purchase by auto-extracting all fields from the Product object.
+            /// Call this in your IStoreListener.ProcessPurchase() for one-line integration.
+            /// Requires com.unity.purchasing package to be installed.
+            /// Duplicate transactions are automatically deduplicated by transactionId.
+            ///
+            /// Example:
+            ///   public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args) {
+            ///       LvlUpSDK.Revenue.TrackPurchase(args.purchasedProduct);
+            ///       return PurchaseProcessingResult.Complete;
+            ///   }
+            /// </summary>
+#if lvlup_iap_enabled
+            public static void TrackPurchase(UnityEngine.Purchasing.Product product)
+            {
+                IAPIntegration.UnityIAPIntegration.TrackPurchase(product);
+            }
+#else
+            public static void TrackPurchase(object product)
+            {
+                IAPIntegration.UnityIAPIntegration.TrackPurchase(product);
+            }
+#endif
+
+            /// <summary>
             /// Flush queued revenue immediately
             /// </summary>
             public static void Flush()
