@@ -25,16 +25,17 @@ namespace LvlUp.Services
 
         // Revenue queue for offline support
         private List<RevenueData> _revenueBatch = new List<RevenueData>();
+        private List<RevenueData> _inFlightBatch = null;
         private bool _hasLoadedPersistedRevenue = false;
         private bool _isSendingRevenue = false;
 
         // PlayerPrefs keys for persistence
         private const string PREF_OFFLINE_REVENUE = "LvlUp_OfflineRevenue";
         private const string PREF_OFFLINE_REVENUE_COUNT = "LvlUp_OfflineRevenueCount";
-        
+
         // Memory and storage guards
         private const int MAX_REVENUE_QUEUE_HARD_CAP = 500; // Hard cap for queued revenue items
-        private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 10MB - minimum free memory required to persist
+        private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 100MB - minimum free memory required to persist
 
         // Transaction deduplication — prevents double-tracking when both
         // TrackPurchase() and manual TrackInAppPurchase() are called for the same purchase.
@@ -192,13 +193,13 @@ namespace LvlUp.Services
 
             _isSendingRevenue = true;
 
-            var batchToSend = new List<RevenueData>(_revenueBatch);
+            _inFlightBatch = new List<RevenueData>(_revenueBatch);
             _revenueBatch.Clear();
 
             if (_config.enableDebugLogs)
-                Debug.Log($"[LvlUp] Flushing revenue batch: {batchToSend.Count} items");
+                Debug.Log($"[LvlUp] Flushing revenue batch: {_inFlightBatch.Count} items");
 
-            _coroutineRunner.StartCoroutine(SendRevenueBatch(batchToSend));
+            _coroutineRunner.StartCoroutine(SendRevenueBatch(_inFlightBatch));
         }
 
         /// <summary>
@@ -249,10 +250,7 @@ namespace LvlUp.Services
 
             if (revenue == null || revenue.Count == 0)
             {
-                int previousCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
-                DeleteIndexedPrefRange(PREF_OFFLINE_REVENUE, 0, previousCount);
-                PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
-                PlayerPrefs.Save();
+                ClearPersistedRevenue();
                 return;
             }
 
@@ -296,7 +294,10 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Persist current revenue batch for offline support
+        /// Persist all pending revenue (queued + in-flight) for offline support.
+        /// Called from OnApplicationPause and OnApplicationQuit to ensure no data
+        /// is lost when the app goes to background or is terminated.
+        /// When nothing is pending, clears any stale persisted data.
         /// </summary>
         public void PersistRevenue()
         {
@@ -305,35 +306,79 @@ namespace LvlUp.Services
 
             EnforceRevenueQueueCap();
 
+            // Combine in-flight items (being sent) with queued items so nothing
+            // is lost if the app is killed before the send coroutine completes.
+            var toPersist = new List<RevenueData>();
+
+            if (_inFlightBatch != null && _inFlightBatch.Count > 0)
+                toPersist.AddRange(_inFlightBatch);
+
             if (_revenueBatch.Count > 0)
+                toPersist.AddRange(_revenueBatch);
+
+            if (toPersist.Count > 0)
             {
-                PersistRevenue(_revenueBatch);
+                PersistRevenue(toPersist);
+            }
+            else
+            {
+                // Nothing pending — clear any stale persisted data left over from
+                // a previous session or a send that succeeded without clearing.
+                ClearPersistedRevenue();
             }
         }
 
         /// <summary>
-        /// Clear all persisted offline revenue (call after successful send)
+        /// Clear all persisted offline revenue.
+        /// Always attempts cleanup regardless of persistQueueToDisk setting,
+        /// so data from a previous config is never orphaned.
         /// </summary>
         private void ClearPersistedRevenue()
         {
-            if (!_config.persistQueueToDisk)
-                return;
-
             try
             {
                 int count = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
-                DeleteIndexedPrefRange(PREF_OFFLINE_REVENUE, 0, count);
-                
+                if (count <= 0)
+                {
+                    // Count key might already be gone; nothing to do.
+                    PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
+                    return;
+                }
+
+                // Safety cap: never loop more than the hard cap to avoid runaway
+                // iteration if the count value is corrupted.
+                int safeCap = Mathf.Min(count, MAX_REVENUE_QUEUE_HARD_CAP);
+                DeleteIndexedPrefRange(PREF_OFFLINE_REVENUE, 0, safeCap);
+
                 // Delete count key
                 PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
                 PlayerPrefs.Save();
-                
+
                 if (_config.enableDebugLogs && count > 0)
-                    Debug.Log($"[LvlUp] Cleared {count} persisted offline revenue items");
+                    Debug.Log($"[LvlUp] Cleared {safeCap} persisted offline revenue items");
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[LvlUp] Failed to clear persisted revenue: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Sync persisted state to match actual pending items after a send completes.
+        /// Ensures PlayerPrefs always reflects the true pending state — no stale data.
+        /// </summary>
+        private void SyncPersistedState()
+        {
+            if (!_config.persistQueueToDisk)
+                return;
+
+            if (_revenueBatch.Count > 0)
+            {
+                PersistRevenue(_revenueBatch);
+            }
+            else
+            {
+                ClearPersistedRevenue();
             }
         }
 
@@ -374,9 +419,6 @@ namespace LvlUp.Services
                 {
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Revenue batch sent successfully: {batch.Count} items");
-                    
-                    // Clear offline storage for successfully sent items
-                    ClearPersistedRevenue();
                 }
                 else
                 {
@@ -385,15 +427,18 @@ namespace LvlUp.Services
                     // Re-queue failed events for retry
                     _revenueBatch.InsertRange(0, batch);
                     EnforceRevenueQueueCap();
-
-                    // Persist to PlayerPrefs for offline support (only on failure)
-                    PersistRevenue(_revenueBatch);
                 }
             });
 
             yield return new WaitUntil(() => requestComplete);
 
+            _inFlightBatch = null;
             _isSendingRevenue = false;
+
+            // After every send (success or failure), sync persisted state so
+            // PlayerPrefs always matches actual pending items. On success this
+            // clears stale data; on failure this persists the re-queued items.
+            SyncPersistedState();
 
             // If there are more items in the batch, flush again
             if (_revenueBatch.Count >= _config.eventBatchSize)
@@ -404,9 +449,6 @@ namespace LvlUp.Services
 
         private void LoadPersistedRevenue()
         {
-            if (!_config.persistQueueToDisk)
-                return;
-
             if (_hasLoadedPersistedRevenue)
                 return;
 
@@ -416,13 +458,19 @@ namespace LvlUp.Services
             {
                 int count = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
                 if (count == 0)
+                {
+                    // Sweep for any orphaned keys left by a previous crash or
+                    // SDK version that didn't clean up properly.
+                    SweepOrphanedKeys(0);
                     return;
+                }
 
                 // Safety check: if persisted count is suspiciously high, it might be corrupted
                 if (count > GetMaxRevenueQueueSize() * 2)
                 {
                     Debug.LogWarning($"[LvlUp] Persisted revenue count ({count}) exceeds safety threshold ({GetMaxRevenueQueueSize() * 2}). Data may be corrupted. Clearing.");
                     ClearPersistedRevenue();
+                    SweepOrphanedKeys(0);
                     return;
                 }
 
@@ -432,12 +480,13 @@ namespace LvlUp.Services
                 {
                     Debug.LogWarning($"[LvlUp] Insufficient free memory ({freeMemory / (1024 * 1024)}MB) to load persisted revenue. Skipping load to prevent crash.");
                     ClearPersistedRevenue();
+                    SweepOrphanedKeys(0);
                     return;
                 }
 
                 int loadedCount = 0;
                 int skippedCount = 0;
-                
+
                 for (int i = 0; i < count; i++)
                 {
                     string key = $"{PREF_OFFLINE_REVENUE}_{i}";
@@ -446,7 +495,7 @@ namespace LvlUp.Services
                         try
                         {
                             string json = PlayerPrefs.GetString(key);
-                            
+
                             // Sanity check: JSON string shouldn't be unreasonably large
                             if (json.Length > 100000) // 100KB per revenue item is unreasonable
                             {
@@ -455,7 +504,7 @@ namespace LvlUp.Services
                                 PlayerPrefs.DeleteKey(key);
                                 continue;
                             }
-                            
+
                             var revenue = JsonUtility.FromJson<RevenueData>(json);
                             if (revenue != null)
                             {
@@ -474,6 +523,10 @@ namespace LvlUp.Services
                 }
 
                 PlayerPrefs.DeleteKey(PREF_OFFLINE_REVENUE_COUNT);
+
+                // Sweep for orphaned keys beyond the count (from prior crashes/versions)
+                SweepOrphanedKeys(count);
+
                 PlayerPrefs.Save();
 
                 if (loadedCount > 0 && _config.enableDebugLogs)
@@ -488,11 +541,38 @@ namespace LvlUp.Services
                 try
                 {
                     ClearPersistedRevenue();
+                    SweepOrphanedKeys(0);
                 }
                 catch (Exception clearEx)
                 {
                     Debug.LogWarning($"[LvlUp] Failed to clear corrupted revenue: {clearEx.Message}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Delete any orphaned PlayerPrefs keys beyond startIndex up to the hard cap.
+        /// Guards against keys left behind by a crash mid-persist or a previous
+        /// SDK version that didn't clean up properly.
+        /// </summary>
+        private void SweepOrphanedKeys(int startIndex)
+        {
+            int swept = 0;
+            for (int i = startIndex; i < MAX_REVENUE_QUEUE_HARD_CAP; i++)
+            {
+                string key = $"{PREF_OFFLINE_REVENUE}_{i}";
+                if (PlayerPrefs.HasKey(key))
+                {
+                    PlayerPrefs.DeleteKey(key);
+                    swept++;
+                }
+            }
+
+            if (swept > 0)
+            {
+                PlayerPrefs.Save();
+                if (_config.enableDebugLogs)
+                    Debug.Log($"[LvlUp] Swept {swept} orphaned revenue keys from PlayerPrefs");
             }
         }
 
