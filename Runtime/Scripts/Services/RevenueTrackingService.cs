@@ -97,10 +97,21 @@ namespace LvlUp.Services
 
                 _recentTransactionIds.Add(revenueData.transactionId);
 
-                // Evict oldest entries when the set gets too large
+                // Evict half the entries when the set gets too large,
+                // keeping roughly the most recent half to continue deduplication.
                 if (_recentTransactionIds.Count > MAX_DEDUP_ENTRIES)
                 {
-                    _recentTransactionIds.Clear();
+                    int removeCount = _recentTransactionIds.Count / 2;
+                    var enumerator = _recentTransactionIds.GetEnumerator();
+                    var toRemove = new List<string>(removeCount);
+                    while (enumerator.MoveNext() && toRemove.Count < removeCount)
+                    {
+                        toRemove.Add(enumerator.Current);
+                    }
+                    for (int i = 0; i < toRemove.Count; i++)
+                    {
+                        _recentTransactionIds.Remove(toRemove[i]);
+                    }
                 }
             }
 

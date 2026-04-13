@@ -62,9 +62,28 @@ namespace LvlUp.IAPIntegration
 
             try
             {
+                if (!product.hasReceipt)
+                {
+                    Debug.LogWarning($"[LvlUp] Skipping IAP track for {product.definition.id} — no receipt (pending or failed purchase)");
+                    return;
+                }
+
                 string productId = product.definition.id;
                 double revenue = (double)product.metadata.localizedPrice;
-                string currency = product.metadata.isoCurrencyCode ?? "USD";
+
+                if (revenue <= 0)
+                {
+                    Debug.LogWarning($"[LvlUp] Skipping IAP track for {productId} — revenue is {revenue} (store metadata may not be loaded)");
+                    return;
+                }
+
+                string currency = product.metadata.isoCurrencyCode;
+                if (string.IsNullOrEmpty(currency))
+                {
+                    Debug.LogWarning($"[LvlUp] IAP currency is null for {productId}, defaulting to USD — revenue may be inaccurate if price is non-USD");
+                    currency = "USD";
+                }
+
                 string transactionId = product.transactionID ?? "";
                 string productName = product.metadata.localizedTitle ?? "";
                 string productType = MapProductType(product.definition.type);

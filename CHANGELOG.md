@@ -5,6 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-04-13
+
+### Fixed
+- **Revenue data loss on app quit**: Revenue queue is now persisted to disk in `OnApplicationQuit`, matching the existing `OnApplicationPause` behavior. Previously, queued IAP revenue was silently lost if the app was killed before the flush coroutine completed.
+- **IAP tracking without receipt**: `TrackPurchase()` now skips products that have no receipt (`hasReceipt == false`), preventing pending or failed purchases from being counted as revenue.
+- **Zero-revenue IAP tracking**: `TrackPurchase()` now skips products with `localizedPrice <= 0`, which can occur when store metadata hasn't loaded yet.
+- **Null currency defaulting silently to USD**: `TrackPurchase()` now logs a warning when `isoCurrencyCode` is null before defaulting to USD, making currency misattribution easier to diagnose.
+- **Transaction dedup eviction clearing all entries**: The deduplication set now evicts the oldest half instead of clearing entirely, preventing a brief window where duplicate transactions could slip through.
+
 ## [1.1.0] - 2026-04-11
 
 ### Added

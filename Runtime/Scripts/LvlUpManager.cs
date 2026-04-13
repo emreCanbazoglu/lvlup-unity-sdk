@@ -333,6 +333,7 @@ namespace LvlUp
             {
                 // Persist events and revenue before quitting
                 _eventTrackingService?.PersistEvents();
+                _revenueTrackingService?.PersistRevenue();
 
                 FlushEventQueue();
                 FlushRevenueQueue();
