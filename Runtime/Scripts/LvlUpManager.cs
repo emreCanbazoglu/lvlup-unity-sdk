@@ -137,11 +137,12 @@ namespace LvlUp
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
             _adMonetizationService.Initialize(_revenueTrackingService.TrackAdImpression);
 
-            // Initialize Unity IAP auto-capture if enabled and package is installed
-            if (_config.autoTrackIAP)
+            // Initialize Unity IAP auto-capture if enabled and package is installed.
+            // The IAP module lives in a separate assembly (LvlUp.IAP) that self-registers
+            // via RuntimeInitializeOnLoadMethod when com.unity.purchasing is installed.
+            if (_config.autoTrackIAP && IAPBridge.InitializeHandler != null)
             {
-                LvlUp.IAPIntegration.UnityIAPIntegration.Initialize(
-                    _revenueTrackingService.TrackInAppPurchase);
+                IAPBridge.InitializeHandler(_revenueTrackingService.TrackInAppPurchase);
             }
 
             // Initialize other services

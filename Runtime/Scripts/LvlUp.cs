@@ -430,17 +430,18 @@ namespace LvlUp
             ///       return PurchaseProcessingResult.Complete;
             ///   }
             /// </summary>
-#if lvlup_iap_enabled
-            public static void TrackPurchase(UnityEngine.Purchasing.Product product)
-            {
-                IAPIntegration.UnityIAPIntegration.TrackPurchase(product);
-            }
-#else
             public static void TrackPurchase(object product)
             {
-                IAPIntegration.UnityIAPIntegration.TrackPurchase(product);
+                if (IAPBridge.TrackPurchaseHandler != null)
+                {
+                    IAPBridge.TrackPurchaseHandler(product);
+                }
+                else
+                {
+                    UnityEngine.Debug.LogWarning("[LvlUp] Unity IAP package (com.unity.purchasing) is not installed. " +
+                        "TrackPurchase() requires the Unity IAP package. Use TrackInAppPurchase() manually instead.");
+                }
             }
-#endif
 
             /// <summary>
             /// Flush queued revenue immediately

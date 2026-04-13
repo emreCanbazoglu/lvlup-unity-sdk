@@ -1,27 +1,25 @@
 {
-    "name": "LvlUp.Editor",
-    "rootNamespace": "LvlUp.Editor",
+    "name": "LvlUp.IAP",
+    "rootNamespace": "LvlUp.IAPIntegration",
     "references": [
         "LvlUp.Runtime",
-        "Unity.Nuget.Newtonsoft-Json",
-        "MaxSdk.Scripts"
+        "Unity.Purchasing"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "lvlup_iap_enabled"
+    ],
     "versionDefines": [
         {
-            "name": "com.applovin.mediation",
+            "name": "com.unity.purchasing",
             "expression": "",
-            "define": "lvlup_max_enabled"
+            "define": "lvlup_iap_enabled"
         }
     ],
     "noEngineReferences": false
 }
-

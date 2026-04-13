@@ -17,11 +17,6 @@
             "name": "com.applovin.mediation",
             "expression": "",
             "define": "lvlup_max_enabled"
-        },
-        {
-            "name": "com.unity.purchasing",
-            "expression": "",
-            "define": "lvlup_iap_enabled"
         }
     ],
     "noEngineReferences": false

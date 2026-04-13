@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Purchasing;
 
 namespace LvlUp.IAPIntegration
 {
@@ -8,21 +9,32 @@ namespace LvlUp.IAPIntegration
     /// Automatically extracts all IAP fields from Unity's Product object
     /// and forwards to RevenueTrackingService.
     ///
+    /// This assembly (LvlUp.IAP) only compiles when com.unity.purchasing is
+    /// installed — gated by defineConstraints in the asmdef. It self-registers
+    /// with the main assembly via IAPBridge at load time.
+    ///
     /// Usage in IStoreListener.ProcessPurchase():
     ///   LvlUpSDK.Revenue.TrackPurchase(args.purchasedProduct);
-    ///
-    /// Requires com.unity.purchasing package. All code is conditionally compiled
-    /// behind the lvlup_iap_enabled define (auto-set via asmdef versionDefines).
     /// </summary>
     public static class UnityIAPIntegration
     {
-#if lvlup_iap_enabled
         private static Action<string, double, string, double, string, string, string, string, int, bool> _trackIAPDelegate;
         private static bool _initialized = false;
 
         /// <summary>
+        /// Auto-register with IAPBridge so the main assembly can call into
+        /// this module without a direct assembly reference.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void Register()
+        {
+            IAPBridge.InitializeHandler = Initialize;
+            IAPBridge.TrackPurchaseHandler = TrackPurchaseFromObject;
+        }
+
+        /// <summary>
         /// Initialize the IAP integration with the revenue tracking delegate.
-        /// Called from LvlUpManager.InitializeServices().
+        /// Called from LvlUpManager.InitializeServices() via IAPBridge.
         /// </summary>
         public static void Initialize(
             Action<string, double, string, double, string, string, string, string, int, bool> trackInAppPurchaseDelegate)
@@ -39,6 +51,28 @@ namespace LvlUp.IAPIntegration
         }
 
         /// <summary>
+        /// Bridge method that accepts object and casts to Product.
+        /// Called from IAPBridge.TrackPurchaseHandler.
+        /// </summary>
+        private static void TrackPurchaseFromObject(object product)
+        {
+            if (product == null)
+            {
+                Debug.LogError("[LvlUp] Cannot track null product");
+                return;
+            }
+
+            if (product is Product unityProduct)
+            {
+                TrackPurchase(unityProduct);
+            }
+            else
+            {
+                Debug.LogError($"[LvlUp] TrackPurchase expected UnityEngine.Purchasing.Product but got {product.GetType().Name}");
+            }
+        }
+
+        /// <summary>
         /// Track a Unity IAP purchase by extracting all fields from the Product object.
         /// Call this in your IStoreListener.ProcessPurchase() for one-line integration.
         ///
@@ -46,7 +80,7 @@ namespace LvlUp.IAPIntegration
         /// store name, product type, and product title.
         /// </summary>
         /// <param name="product">Unity IAP Product from PurchaseEventArgs.purchasedProduct</param>
-        public static void TrackPurchase(UnityEngine.Purchasing.Product product)
+        public static void TrackPurchase(Product product)
         {
             if (product == null)
             {
@@ -117,15 +151,15 @@ namespace LvlUp.IAPIntegration
         /// <summary>
         /// Map Unity's ProductType enum to LvlUp's string representation
         /// </summary>
-        private static string MapProductType(UnityEngine.Purchasing.ProductType type)
+        private static string MapProductType(ProductType type)
         {
             switch (type)
             {
-                case UnityEngine.Purchasing.ProductType.Consumable:
+                case ProductType.Consumable:
                     return "CONSUMABLE";
-                case UnityEngine.Purchasing.ProductType.NonConsumable:
+                case ProductType.NonConsumable:
                     return "NON_CONSUMABLE";
-                case UnityEngine.Purchasing.ProductType.Subscription:
+                case ProductType.Subscription:
                     return "SUBSCRIPTION";
                 default:
                     return "CONSUMABLE";
@@ -147,25 +181,5 @@ namespace LvlUp.IAPIntegration
             return "UNKNOWN";
 #endif
         }
-#else
-        // Stub methods when com.unity.purchasing is not installed.
-        // These allow the code to compile but log a warning at runtime.
-
-        public static void Initialize(
-            Action<string, double, string, double, string, string, string, string, int, bool> trackInAppPurchaseDelegate)
-        {
-            // No-op: Unity IAP package not installed
-        }
-
-        /// <summary>
-        /// Fallback when com.unity.purchasing is not installed.
-        /// Accepts object to avoid compile errors; logs a warning.
-        /// </summary>
-        public static void TrackPurchase(object product)
-        {
-            Debug.LogWarning("[LvlUp] Unity IAP package (com.unity.purchasing) is not installed. " +
-                "TrackPurchase() requires the Unity IAP package. Use TrackInAppPurchase() manually instead.");
-        }
-#endif
     }
 }
