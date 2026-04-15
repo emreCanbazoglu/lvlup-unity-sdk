@@ -5,6 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-04-15
+
+### Fixed
+- **Unity IAP auto-capture now compiles on both IAP 4.x and 5.x.** Previously the `LvlUp.IAP` asmdef referenced the Purchasing assembly by name (`"Unity.Purchasing"`), which only exists in IAP 5.x — on 4.x the assembly name is `"UnityEngine.Purchasing"` and the reference failed to resolve, breaking the build. Reference is now by asmdef GUID (`60bfecf5cb232594891bc622f40d6bed`), which Unity kept stable across the 4.x → 5.x package rename. The `Product` / `ProductDefinition` / `ProductMetadata` API we rely on is identical between versions, so no code changes were needed alongside the asmdef fix.
+
+### Notes
+- Public API unchanged — `LvlUpSDK.Revenue.TrackPurchase(product)` works as before.
+- No minimum IAP version constraint is currently set; the integration compiles against any version of `com.unity.purchasing` that ships the core `Product` type. If a future IAP major renames or removes one of those members, we'll add a `versionDefines` clause to gate specifically.
+
 ## [1.2.0] - 2026-04-15
 
 ### Added
