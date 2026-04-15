@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `IAPBridge` static class — was the delegate-based bridge between `LvlUp.Runtime` and the separate `LvlUp.IAP` assembly. Unused now that both live in the same assembly. Not part of any public API surface.
 - `lvlup_iap_enabled` scripting define — set automatically by the asmdef's `versionDefines` entry; gone with the asmdef.
 
+### Added
+- `Runtime/link.xml` — preserves `Product` / `ProductDefinition` / `ProductMetadata` / `ProductType` members against IL2CPP managed code stripping. Required because the reflection-based integration no longer gives the stripper a static reference graph to walk. Covers both `UnityEngine.Purchasing` (4.x) and `Unity.Purchasing` (5.x) assembly names; `ignoreIfMissing="1"` makes it harmless when the Purchasing package isn't installed.
+
 ### Notes
 - **Public API unchanged.** `LvlUpSDK.Revenue.TrackPurchase(product)` works exactly as before.
 - **Config flag preserved.** `LvlUpConfig.autoTrackIAP` is now honored inside `UnityIAPIntegration.TrackPurchase` rather than as a gate on IAP-assembly init. Setting it to `false` makes `TrackPurchase(product)` a no-op; use `TrackInAppPurchase(...)` manually.
