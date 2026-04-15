@@ -148,18 +148,23 @@ namespace LvlUp
         }
 
         /// <summary>
-        /// Track a level failed event with attempts count and objectives remaining.
-        /// `objectivesLeft` is sent as a custom property on the event — the analytics
+        /// Track a level failed event with attempts count and normalized objective progress.
+        /// `objectiveProgress` is sent as a custom property on the event — the analytics
         /// dashboard reads it from the event properties bag when computing failure-by-
         /// progress breakdowns.
+        ///
+        /// Normalized to [0, 1] so the metric is comparable across levels with different
+        /// objective counts: 0.0 = nothing completed, 1.0 = all objectives complete.
+        /// (At `level_failed` it will typically be &lt; 1.0.) The SDK does not clamp —
+        /// callers are expected to pass a value in range.
         /// </summary>
         /// <param name="levelId">Level identifier</param>
         /// <param name="reason">Reason for failure</param>
         /// <param name="timeSeconds">Time spent before failing</param>
         /// <param name="attempts">Number of attempts so far</param>
-        /// <param name="objectivesLeft">Number of objectives remaining when the level failed (game-specific)</param>
+        /// <param name="objectiveProgress">Normalized objective progress in [0, 1] (e.g., 0.6 = 60% of objectives complete when the level failed)</param>
         /// <param name="additionalProperties">Optional additional properties</param>
-        public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, int objectivesLeft, Dictionary<string, object> additionalProperties = null)
+        public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, float objectiveProgress, Dictionary<string, object> additionalProperties = null)
         {
             var properties = new Dictionary<string, object>
             {
@@ -167,7 +172,7 @@ namespace LvlUp
                 { "reason", reason },
                 { "timeSeconds", timeSeconds },
                 { "attempts", attempts },
-                { "objectivesLeft", objectivesLeft },
+                { "objectiveProgress", objectiveProgress },
             };
 
             MergeProperties(properties, additionalProperties);
