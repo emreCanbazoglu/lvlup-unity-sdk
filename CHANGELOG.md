@@ -5,6 +5,21 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-04-15
+
+### Changed
+- **Unity IAP auto-capture now supports both IAP 4.x and 5.x.** Previously the integration only compiled against IAP 5.x because its asmdef referenced the `Unity.Purchasing` assembly — Unity renamed that assembly between 4.x (`UnityEngine.Purchasing`) and 5.x (`Unity.Purchasing`), so games on 4.x got a compile error. The integration now uses reflection against the `Product` object (the API has been stable across both majors), removing the hard assembly reference entirely. The same code path works on any IAP major version that exposes `Product.hasReceipt`, `Product.transactionID`, `Product.definition.{id,type}`, `Product.metadata.{localizedPrice,isoCurrencyCode,localizedTitle}`.
+
+### Removed
+- `LvlUp.IAP` separate assembly and `Runtime/Scripts/Plugins/IAP/` folder — no longer needed now that the integration lives in `LvlUp.Runtime` and has no typed IAP dependency.
+- `IAPBridge` static class — was the delegate-based bridge between `LvlUp.Runtime` and the separate `LvlUp.IAP` assembly. Unused now that both live in the same assembly. Not part of any public API surface.
+- `lvlup_iap_enabled` scripting define — set automatically by the asmdef's `versionDefines` entry; gone with the asmdef.
+
+### Notes
+- **Public API unchanged.** `LvlUpSDK.Revenue.TrackPurchase(product)` works exactly as before.
+- **Config flag preserved.** `LvlUpConfig.autoTrackIAP` is now honored inside `UnityIAPIntegration.TrackPurchase` rather than as a gate on IAP-assembly init. Setting it to `false` makes `TrackPurchase(product)` a no-op; use `TrackInAppPurchase(...)` manually.
+- Reflection handles are bound lazily and cached — one-time cost on the first tracked purchase.
+
 ## [1.2.0] - 2026-04-15
 
 ### Added
