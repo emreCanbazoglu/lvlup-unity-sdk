@@ -137,10 +137,13 @@ namespace LvlUp
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs);
             _adMonetizationService.Initialize(_revenueTrackingService.TrackAdImpression);
 
-            // Unity IAP auto-capture: no init wiring needed anymore — UnityIAPIntegration
-            // uses reflection against the Product object so it works regardless of which
-            // Unity IAP major version is installed (4.x or 5.x, different assembly names).
-            // The autoTrackIAP flag is honored by UnityIAPIntegration.TrackPurchase directly.
+            // Initialize Unity IAP auto-capture if enabled and package is installed.
+            // The IAP module lives in a separate assembly (LvlUp.IAP) that self-registers
+            // via RuntimeInitializeOnLoadMethod when com.unity.purchasing is installed.
+            if (_config.autoTrackIAP && IAPBridge.InitializeHandler != null)
+            {
+                IAPBridge.InitializeHandler(_revenueTrackingService.TrackInAppPurchase);
+            }
 
             // Initialize other services
             _sessionManagementService.Initialize();
@@ -695,16 +698,6 @@ namespace LvlUp
         public int? GetCurrentLevel()
         {
             return _config.currentLevelOrder;
-        }
-
-        /// <summary>
-        /// Whether Unity IAP auto-capture is enabled. Read by UnityIAPIntegration
-        /// so that LvlUpSDK.Revenue.TrackPurchase(product) becomes a no-op when the
-        /// game has opted out of auto-capture.
-        /// </summary>
-        public bool GetAutoTrackIAP()
-        {
-            return _config != null && _config.autoTrackIAP;
         }
 
         /// <summary>

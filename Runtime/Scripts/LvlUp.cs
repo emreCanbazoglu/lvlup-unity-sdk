@@ -459,7 +459,15 @@ namespace LvlUp
             /// </summary>
             public static void TrackPurchase(object product)
             {
-                UnityIAPIntegration.TrackPurchase(product);
+                if (IAPBridge.TrackPurchaseHandler != null)
+                {
+                    IAPBridge.TrackPurchaseHandler(product);
+                }
+                else
+                {
+                    UnityEngine.Debug.LogWarning("[LvlUp] Unity IAP package (com.unity.purchasing) is not installed. " +
+                        "TrackPurchase() requires the Unity IAP package. Use TrackInAppPurchase() manually instead.");
+                }
             }
 
             /// <summary>
