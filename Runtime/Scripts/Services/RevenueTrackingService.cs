@@ -396,6 +396,15 @@ namespace LvlUp.Services
             {
                 revenueData.countryCode = geoData.countryCode;
             }
+
+            // Auto-inject current level order for IAP events only (ARPU-by-level).
+            // Skipped for ad impressions — impression cadence is not player-driven, so
+            // attributing each impression to the player's current level adds noise, not
+            // signal. If the caller already set currentLevelOrder explicitly, keep it.
+            if (revenueData.revenueType == "IN_APP_PURCHASE" && !revenueData.currentLevelOrder.HasValue)
+            {
+                revenueData.currentLevelOrder = _config.currentLevelOrder;
+            }
         }
 
         private IEnumerator SendRevenueBatch(List<RevenueData> batch)

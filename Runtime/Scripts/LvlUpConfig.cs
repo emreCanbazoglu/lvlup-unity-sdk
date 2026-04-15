@@ -97,7 +97,16 @@ namespace LvlUp
         /// Incremented when changes are made to the level funnel
         /// </summary>
         public int levelFunnelVersion = 1;
-        
+
+        /// <summary>
+        /// Current level order of the player (runtime state, not persisted).
+        /// Auto-captured from TrackLevelStart(levelId) calls, can be overridden via
+        /// LvlUpSDK.Level.SetCurrent(int). Auto-injected into IAP revenue events for
+        /// ARPU-by-level analytics on the dashboard.
+        /// </summary>
+        [System.NonSerialized]
+        public int? currentLevelOrder = null;
+
         public string remoteConfigEnvironment = "production";
     }
 }

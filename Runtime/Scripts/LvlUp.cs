@@ -383,6 +383,33 @@ namespace LvlUp
             }
         }
 
+        /// <summary>
+        /// Current-level context API. The SDK auto-captures level order from
+        /// LvlUpEvents.TrackLevelStart(levelId) calls. Games that use non-sequential
+        /// level IDs (or want to track progression order independently) can set it
+        /// explicitly via SetCurrent(). The value is auto-injected into IAP revenue
+        /// events so the dashboard can compute ARPU-by-level.
+        /// </summary>
+        public static class Level
+        {
+            /// <summary>
+            /// Set the player's current level order. Auto-injected into IAP events.
+            /// </summary>
+            /// <param name="levelOrder">Current level order (1-based)</param>
+            public static void SetCurrent(int levelOrder)
+            {
+                LvlUpManager.Instance?.SetCurrentLevel(levelOrder);
+            }
+
+            /// <summary>
+            /// Get the player's current level order (null if not set).
+            /// </summary>
+            public static int? GetCurrent()
+            {
+                return LvlUpManager.Instance?.GetCurrentLevel();
+            }
+        }
+
         #endregion
 
         #region Revenue Tracking

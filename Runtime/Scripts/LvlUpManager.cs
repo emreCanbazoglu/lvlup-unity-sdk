@@ -677,6 +677,30 @@ namespace LvlUp
         }
 
         /// <summary>
+        /// Set the current level order of the player. Auto-injected into IAP revenue
+        /// events so the analytics dashboard can compute ARPU-by-level.
+        /// Automatically called by LvlUpEvents.TrackLevelStart(levelId). Games that use
+        /// non-sequential level IDs can call this explicitly with the player's current
+        /// progression order (e.g., 1, 2, 3, ...).
+        /// </summary>
+        /// <param name="levelOrder">Current level order (1-based)</param>
+        public void SetCurrentLevel(int levelOrder)
+        {
+            _config.currentLevelOrder = levelOrder;
+
+            if (_config.enableDebugLogs)
+                Debug.Log($"[LvlUp] Current level order updated: {levelOrder}");
+        }
+
+        /// <summary>
+        /// Get the current level order of the player (null if not set).
+        /// </summary>
+        public int? GetCurrentLevel()
+        {
+            return _config.currentLevelOrder;
+        }
+
+        /// <summary>
         /// Track multiple events in a batch
         /// </summary>
         public void TrackEventsBatch(List<LvlUpEvent> events, Action<ApiResponse> callback = null)

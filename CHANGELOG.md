@@ -5,6 +5,22 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-15
+
+### Added
+- **Current Level Order Auto-Capture** (for IAP revenue attribution): Enables ARPU-by-level analytics on the dashboard.
+  - `LvlUpSDK.Level.SetCurrent(int levelOrder)` — explicitly set the player's current level order. Use this if your game has non-sequential level IDs or tracks progression separately from the `levelId` you pass to `TrackLevelStart`.
+  - `LvlUpSDK.Level.GetCurrent()` — returns the currently tracked level order (`int?`).
+  - `LvlUpEvents.TrackLevelStart(levelId, ...)` now auto-calls `SetCurrent(levelId)`, so games that use sequential level IDs get the field populated for free.
+  - New `currentLevelOrder` field on `RevenueData` — auto-injected for `IN_APP_PURCHASE` events in `RevenueTrackingService.PopulateRevenueContext`. Not injected for `AD_IMPRESSION` events (ad cadence is not player-driven — would add noise, not signal). Callers can still override by setting `RevenueData.currentLevelOrder` explicitly before calling `TrackRevenue`.
+- **Objectives Left on Level Fail**: New `TrackLevelFailed` overload accepting `objectivesLeft` (number of remaining objectives when the level failed). Sent as a custom property on the `level_failed` event (consistent with `levelId`, `reason`, `attempts`). Game-specific metric — not every game has an objective system.
+
+### Fixed
+- **Stale `sdkVersion` reported to backend**: `EventMetadata.sdkVersion` was hardcoded to `"unity 1.0.0"` and never updated through 1.1.0 / 1.1.1 releases, so server-side telemetry could not distinguish SDK versions. Version is now sourced from a single constant (`LvlUp.LvlUpVersion.Current`) that must be bumped alongside `package.json` on every release. Emitted value format unchanged (`"unity <version>"`).
+
+### Backend contract
+- Backend agents should reference `specs/003-sdk-level-context/spec.md` in the `lvlup-backend` repo for the new payload fields and storage expectations (direct column vs. `properties` JSON).
+
 ## [1.1.1] - 2026-04-13
 
 ### Fixed

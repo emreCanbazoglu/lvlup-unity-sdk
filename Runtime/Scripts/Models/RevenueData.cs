@@ -37,6 +37,13 @@ namespace LvlUp.Models
         public bool isVerified;
         public int quantity;
         public bool isRestored;
+
+        // Player context (IAP only) — auto-injected by RevenueTrackingService from
+        // LvlUpManager.GetCurrentLevel() when not explicitly set. Enables ARPU-by-level
+        // analytics on the dashboard. HTTP payload uses Newtonsoft which serializes null
+        // correctly; Unity's JsonUtility drops nullable value types on PlayerPrefs
+        // persistence (same limitation as transactionTimestamp).
+        public int? currentLevelOrder;
         
         // Context (from EventMetadata)
         public string platform;

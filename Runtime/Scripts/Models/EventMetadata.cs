@@ -88,7 +88,7 @@ namespace LvlUp.Models
             this.device = SystemInfo.deviceModel;
             this.deviceId = SystemInfo.deviceUniqueIdentifier;
             this.appVersion = Application.version;
-            this.sdkVersion = "unity 1.0.0";
+            this.sdkVersion = $"unity {LvlUp.LvlUpVersion.Current}";
             
             // Connection type
             if (Application.internetReachability == NetworkReachability.NotReachable)
