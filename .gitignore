@@ -57,3 +57,4 @@ Thumbs.db
 # Node (if you have any build tools)
 node_modules/
 
+.claude/settings.local.json
