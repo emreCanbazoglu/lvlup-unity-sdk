@@ -5,6 +5,18 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-04
+
+### Added
+- A/B test debug override support for Remote Config, including forced layer/test/variant query parameters and a debug catalog fetch endpoint.
+- LvlUp Debug Window controls for selecting or manually entering forced A/B cohorts and displaying current A/B assignments.
+- SR Debugger controls for changing A/B override keys on device when `lvlup_srdebugger_enabled` is defined.
+- `abTests` payload metadata for analytics events and revenue payloads, excluding forced debug overrides from production analytics attribution.
+
+### Fixed
+- Forced A/B debug responses are no longer cached as normal Remote Config results.
+- Resolved ambiguous debug settings references between the public SDK namespace and the internal utils namespace.
+
 ## [1.2.1] - 2026-04-15
 
 ### Fixed
@@ -172,4 +184,3 @@ For questions, issues, or feature requests:
 - GitHub Issues: https://github.com/yourusername/lvlup-unity-sdk/issues
 - Email: support@lvlup.com
 - Discord: https://discord.gg/lvlup
-

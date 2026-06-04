@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace LvlUp.Models
 {
@@ -54,6 +55,7 @@ namespace LvlUp.Models
         
         // Additional data
         public string customData;         // JSON string for additional data
+        public Dictionary<string, string> abTests;
         
         public RevenueData()
         {
@@ -63,4 +65,3 @@ namespace LvlUp.Models
         }
     }
 }
-

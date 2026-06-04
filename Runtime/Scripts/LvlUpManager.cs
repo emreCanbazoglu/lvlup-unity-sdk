@@ -172,6 +172,7 @@ namespace LvlUp
                 () => _sessionManagementService.GetCurrentUserId(),
                 () => _sessionManagementService.GetCurrentSession()?.sessionId,
                 () => _sessionManagementService.GetSessionNumber(),
+                GetAnalyticsAbTests,
                 GetCachedGeoData,
                 GetPlatform,
                 GetManufacturer
@@ -187,6 +188,7 @@ namespace LvlUp
                 () => _sessionManagementService.GetCurrentUserId(),
                 () => _sessionManagementService.GetCurrentSession()?.sessionId,
                 () => _sessionManagementService.GetSessionNumber(),
+                GetAnalyticsAbTests,
                 ApplyGeoDataToEvent
             );
         }
@@ -604,6 +606,11 @@ namespace LvlUp
         public GeoData GetCachedGeoData()
         {
             return _cachedGeoData;
+        }
+
+        private Dictionary<string, string> GetAnalyticsAbTests()
+        {
+            return _remoteConfigService?.GetAnalyticsAbTests();
         }
 
         /// <summary>

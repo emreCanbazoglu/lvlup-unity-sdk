@@ -97,6 +97,41 @@ namespace LvlUp.Utils
                 "LvlUp"
             ));
 
+            // AB Test Override Section
+            _dynamicContainer.AddOption(OptionDefinition.Create(
+                "A/B Override",
+                () => GetAbOverrideDisplay(),
+                null,
+                "LvlUp"
+            ));
+
+            _dynamicContainer.AddOption(OptionDefinition.Create(
+                "A/B Layer Key",
+                () => global::LvlUp.LvlUpDebugSettings.ForceAbLayerKey ?? "",
+                value => global::LvlUp.LvlUpDebugSettings.ForceAbLayerKey = value,
+                "LvlUp"
+            ));
+
+            _dynamicContainer.AddOption(OptionDefinition.Create(
+                "A/B Test Key",
+                () => global::LvlUp.LvlUpDebugSettings.ForceAbTestKey ?? "",
+                value => global::LvlUp.LvlUpDebugSettings.ForceAbTestKey = value,
+                "LvlUp"
+            ));
+
+            _dynamicContainer.AddOption(OptionDefinition.Create(
+                "A/B Variant Key",
+                () => global::LvlUp.LvlUpDebugSettings.ForceAbVariantKey ?? "",
+                value => global::LvlUp.LvlUpDebugSettings.ForceAbVariantKey = value,
+                "LvlUp"
+            ));
+
+            _dynamicContainer.AddOption(OptionDefinition.FromMethod(
+                "Clear A/B Override",
+                ClearAbOverride,
+                "LvlUp"
+            ));
+
             // SDK Status Section
             var manager = Object.FindObjectOfType<LvlUpManager>();
             if (manager != null && manager.IsInitialized())
@@ -135,7 +170,7 @@ namespace LvlUp.Utils
 
         private string GetEnvironmentDisplay()
         {
-            var current = LvlUpDebugSettings.EnvironmentOverride;
+            var current = global::LvlUp.LvlUpDebugSettings.EnvironmentOverride;
             if (string.IsNullOrEmpty(current))
             {
                 return "production (default)";
@@ -145,7 +180,7 @@ namespace LvlUp.Utils
 
         private string GetPlatformDisplay()
         {
-            var current = LvlUpDebugSettings.PlatformOverride;
+            var current = global::LvlUp.LvlUpDebugSettings.PlatformOverride;
             if (string.IsNullOrEmpty(current))
             {
                 return RuntimePlatform.ToString() + " (default)";
@@ -177,15 +212,35 @@ namespace LvlUp.Utils
 
         private void SetEnvironment(string environment)
         {
-            LvlUpDebugSettings.EnvironmentOverride = environment;
+            global::LvlUp.LvlUpDebugSettings.EnvironmentOverride = environment;
             Debug.Log($"[LvlUp] Environment override set to: {environment ?? "default"}");
             RebuildOptions();
         }
 
         private void SetPlatform(string platform)
         {
-            LvlUpDebugSettings.PlatformOverride = platform;
+            global::LvlUp.LvlUpDebugSettings.PlatformOverride = platform;
             Debug.Log($"[LvlUp] Platform override set to: {platform ?? "default"}");
+            RebuildOptions();
+        }
+
+        private string GetAbOverrideDisplay()
+        {
+            if (!global::LvlUp.LvlUpDebugSettings.HasForcedAbOverride)
+            {
+                return "none";
+            }
+
+            var layer = global::LvlUp.LvlUpDebugSettings.ForceAbLayerKey;
+            var test = global::LvlUp.LvlUpDebugSettings.ForceAbTestKey;
+            var variant = global::LvlUp.LvlUpDebugSettings.ForceAbVariantKey;
+            return string.IsNullOrEmpty(layer) ? $"{test} / {variant}" : $"{layer} / {test} / {variant}";
+        }
+
+        private void ClearAbOverride()
+        {
+            global::LvlUp.LvlUpDebugSettings.ClearForcedAbOverride();
+            Debug.Log("[LvlUp] A/B override cleared");
             RebuildOptions();
         }
 
@@ -211,4 +266,3 @@ namespace LvlUp.Utils
     }
 }
 #endif
-

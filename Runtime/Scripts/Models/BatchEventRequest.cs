@@ -22,6 +22,7 @@ namespace LvlUp.Models
     {
         public string eventName;
         public Dictionary<string, object> properties;
+        public Dictionary<string, string> abTests;
         public string timestamp;
     }
 }

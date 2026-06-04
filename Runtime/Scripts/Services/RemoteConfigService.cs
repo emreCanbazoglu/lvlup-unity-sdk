@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using LvlUp.RemoteConfig;
 using LvlUp;
-using LvlUp.Utils;
 namespace LvlUp.Services
 {
     /// <summary>
@@ -19,7 +18,10 @@ namespace LvlUp.Services
 
         // State
         private Dictionary<string, ConfigData> _configs = new Dictionary<string, ConfigData>();
+        private Dictionary<string, string> _abTests = new Dictionary<string, string>();
+        private List<AbDebugLayer> _abDebugCatalog = new List<AbDebugLayer>();
         private string _currentEnvironment = "production";
+        private bool _currentAbTestsForced = false;
         private bool _isInitialized = false;
         private bool _isFetching = false;
 
@@ -162,14 +164,19 @@ namespace LvlUp.Services
                 }
 #endif
                 
-                if (!string.IsNullOrEmpty(platformToUse))
-                    endpoint += $"&platform={platformToUse}";
-                if (!string.IsNullOrEmpty(_contextVersion))
-                    endpoint += $"&version={_contextVersion}";
-                if (!string.IsNullOrEmpty(_contextCountry))
-                    endpoint += $"&country={_contextCountry}";
-                if (!string.IsNullOrEmpty(_contextSegment))
-                    endpoint += $"&segment={_contextSegment}";
+                endpoint = AppendQueryParameter(endpoint, "platform", platformToUse);
+                endpoint = AppendQueryParameter(endpoint, "version", _contextVersion);
+                endpoint = AppendQueryParameter(endpoint, "country", _contextCountry);
+                endpoint = AppendQueryParameter(endpoint, "segment", _contextSegment);
+
+                bool hasForcedAbOverride = LvlUpDebugSettings.HasForcedAbOverride;
+                if (hasForcedAbOverride)
+                {
+                    endpoint = AppendQueryParameter(endpoint, "debug", "true");
+                    endpoint = AppendQueryParameter(endpoint, "forceAbLayerKey", LvlUpDebugSettings.ForceAbLayerKey);
+                    endpoint = AppendQueryParameter(endpoint, "forceAbTestKey", LvlUpDebugSettings.ForceAbTestKey);
+                    endpoint = AppendQueryParameter(endpoint, "forceAbVariantKey", LvlUpDebugSettings.ForceAbVariantKey);
+                }
 
                 // Use GET request - backend identifies game from API key in header
                 // Note: LvlUpHttpClient.Get<T> already wraps response in ApiResponse<T>
@@ -226,6 +233,50 @@ namespace LvlUp.Services
             }
         }
 
+        public void FetchAbDebugCatalogAsync(MonoBehaviour coroutineRunner, Action<bool, List<AbDebugLayer>> onComplete = null)
+        {
+            if (!_isInitialized)
+            {
+                Debug.LogError("[LvlUp] RemoteConfigService not initialized");
+                onComplete?.Invoke(false, new List<AbDebugLayer>());
+                return;
+            }
+
+            coroutineRunner.StartCoroutine(FetchAbDebugCatalogInternal(onComplete));
+        }
+
+        private IEnumerator FetchAbDebugCatalogInternal(Action<bool, List<AbDebugLayer>> onComplete)
+        {
+            string environmentToUse = GetCurrentEnvironment();
+            string endpoint = $"config/ab-tests/debug-catalog?environment={Uri.EscapeDataString(environmentToUse)}";
+
+            bool fetchComplete = false;
+            bool success = false;
+            List<AbDebugLayer> layers = new List<AbDebugLayer>();
+
+            yield return _httpClient.Get<AbDebugCatalogResponse>(endpoint,
+                callback: (response) =>
+                {
+                    success = response.success;
+                    if (response.success && response.data?.layers != null)
+                    {
+                        layers = new List<AbDebugLayer>(response.data.layers);
+                        _abDebugCatalog = layers;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[LvlUp] Failed to fetch A/B debug catalog: {response.error}");
+                    }
+                    fetchComplete = true;
+                }
+            );
+
+            if (!fetchComplete)
+                yield return new WaitForSeconds(0.1f);
+
+            onComplete?.Invoke(success, layers);
+        }
+
         private void ProcessConfigsResponse(ConfigsResponse configsResponse)
         {
             if (configsResponse?.configs == null)
@@ -254,8 +305,14 @@ namespace LvlUp.Services
                 }
             }
 
+            _abTests = configsResponse?.abTests != null
+                ? new Dictionary<string, string>(configsResponse.abTests)
+                : new Dictionary<string, string>();
+            _currentAbTestsForced = configsResponse?.debug?.forcedAbOverride != null &&
+                configsResponse.debug.forcedAbOverride.forced;
+
             // Save to cache if from server
-            if (!isFromCache && configsResponse != null)
+            if (!isFromCache && configsResponse != null && !_currentAbTestsForced)
             {
                 _cacheService.SaveConfigs(configsResponse, _currentEnvironment);
             }
@@ -269,6 +326,14 @@ namespace LvlUp.Services
             });
 
             Debug.Log($"[LvlUp] Loaded {configs.Count} configs (from cache: {isFromCache})");
+        }
+
+        private string AppendQueryParameter(string endpoint, string key, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return endpoint;
+
+            return $"{endpoint}&{key}={Uri.EscapeDataString(value)}";
         }
 
         #endregion
@@ -453,12 +518,42 @@ namespace LvlUp.Services
         }
 
         /// <summary>
+        /// Get current AB assignments returned by remote config.
+        /// Forced debug overrides are included here for display/debugging.
+        /// </summary>
+        public Dictionary<string, string> GetCurrentAbTests()
+        {
+            return new Dictionary<string, string>(_abTests);
+        }
+
+        public IEnumerable<AbDebugLayer> GetAbDebugCatalog()
+        {
+            return _abDebugCatalog;
+        }
+
+        /// <summary>
+        /// Get AB assignments that are safe to attach to analytics payloads.
+        /// Forced debug overrides are intentionally excluded.
+        /// </summary>
+        public Dictionary<string, string> GetAnalyticsAbTests()
+        {
+            return _currentAbTestsForced ? null : new Dictionary<string, string>(_abTests);
+        }
+
+        public bool HasForcedAbOverrideActive()
+        {
+            return _currentAbTestsForced;
+        }
+
+        /// <summary>
         /// Clear all cached data
         /// </summary>
         public void ClearCache()
         {
             _cacheService.ClearCache();
             _configs.Clear();
+            _abTests.Clear();
+            _currentAbTestsForced = false;
             Debug.Log("[LvlUp] Remote config cache cleared");
         }
 
@@ -499,4 +594,3 @@ namespace LvlUp.Services
         #endregion
     }
 }
-

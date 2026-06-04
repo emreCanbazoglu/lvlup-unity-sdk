@@ -80,7 +80,66 @@ namespace LvlUp.RemoteConfig
     public class ConfigsResponse
     {
         public ConfigData[] configs;
+        public Dictionary<string, string> abTests;
+        public ConfigDebugData debug;
         public long timestamp;
+    }
+
+    [Serializable]
+    public class ConfigDebugData
+    {
+        public ForcedAbOverrideData forcedAbOverride;
+    }
+
+    [Serializable]
+    public class ForcedAbOverrideData
+    {
+        public bool forced;
+        public string layerKey;
+        public string layerName;
+        public string testKey;
+        public string testName;
+        public string testStatus;
+        public string variantKey;
+        public string variantName;
+    }
+
+    [Serializable]
+    public class AbDebugCatalogResponse
+    {
+        public AbDebugLayer[] layers;
+    }
+
+    [Serializable]
+    public class AbDebugLayer
+    {
+        public string id;
+        public string key;
+        public string name;
+        public string environment;
+        public AbDebugTest[] tests;
+    }
+
+    [Serializable]
+    public class AbDebugTest
+    {
+        public string id;
+        public string key;
+        public string name;
+        public string status;
+        public int priority;
+        public double allocationPercent;
+        public AbDebugVariant[] variants;
+    }
+
+    [Serializable]
+    public class AbDebugVariant
+    {
+        public string id;
+        public string key;
+        public string name;
+        public double weightPercent;
+        public bool isControl;
     }
     
     /// <summary>
@@ -153,4 +212,3 @@ namespace LvlUp.RemoteConfig
         }
     }
 }
-

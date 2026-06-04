@@ -18,6 +18,7 @@ namespace LvlUp.Services
         private readonly Func<string> _getUserId;
         private readonly Func<string> _getSessionId;
         private readonly Func<int> _getSessionNum;
+        private readonly Func<Dictionary<string, string>> _getAbTests;
         private readonly Action<LvlUpEvent> _applyGeoData;
 
         // Event queue for offline support
@@ -44,6 +45,7 @@ namespace LvlUp.Services
             Func<string> getUserId,
             Func<string> getSessionId,
             Func<int> getSessionNum,
+            Func<Dictionary<string, string>> getAbTests,
             Action<LvlUpEvent> applyGeoData)
         {
             _httpClient = httpClient;
@@ -52,6 +54,7 @@ namespace LvlUp.Services
             _getUserId = getUserId;
             _getSessionId = getSessionId;
             _getSessionNum = getSessionNum;
+            _getAbTests = getAbTests;
             _applyGeoData = applyGeoData;
         }
 
@@ -128,7 +131,9 @@ namespace LvlUp.Services
 
             foreach (var evt in events)
             {
-                batchRequest.events.Add(evt.ToEventDataItem());
+                var eventData = evt.ToEventDataItem();
+                ApplyAbTests(eventData);
+                batchRequest.events.Add(eventData);
             }
 
             _coroutineRunner.StartCoroutine(_httpClient.Post<object>("analytics/events/batch", batchRequest, response =>
@@ -322,11 +327,14 @@ namespace LvlUp.Services
 
         private void SendEventImmediately(LvlUpEvent lvlUpEvent, Action<ApiResponse> callback)
         {
+            var eventData = lvlUpEvent.ToEventDataItem();
+            ApplyAbTests(eventData);
+
             var batchRequest = new BatchEventRequest
             {
                 userId = _getUserId(),
                 sessionId = _getSessionId(),
-                events = new List<EventDataItem> { lvlUpEvent.ToEventDataItem() },
+                events = new List<EventDataItem> { eventData },
             };
 
             _coroutineRunner.StartCoroutine(_httpClient.Post<object>("analytics/events/batch", batchRequest, response =>
@@ -341,6 +349,18 @@ namespace LvlUp.Services
                     message = response.message
                 });
             }));
+        }
+
+        private void ApplyAbTests(EventDataItem eventData)
+        {
+            if (eventData == null || eventData.abTests != null)
+                return;
+
+            var abTests = _getAbTests?.Invoke();
+            if (abTests != null && abTests.Count > 0)
+            {
+                eventData.abTests = abTests;
+            }
         }
 
         private IEnumerator FlushInBatchesCoroutine(Action<ApiResponse> callback)

@@ -19,6 +19,7 @@ namespace LvlUp.Services
         private readonly Func<string> _getUserId;
         private readonly Func<string> _getSessionId;
         private readonly Func<int> _getSessionNum;
+        private readonly Func<Dictionary<string, string>> _getAbTests;
         private readonly Func<GeoData> _getGeoData;
         private readonly Func<string> _getPlatform;
         private readonly Func<string> _getManufacturer;
@@ -49,6 +50,7 @@ namespace LvlUp.Services
             Func<string> getUserId,
             Func<string> getSessionId,
             Func<int> getSessionNum,
+            Func<Dictionary<string, string>> getAbTests,
             Func<GeoData> getGeoData,
             Func<string> getPlatform,
             Func<string> getManufacturer)
@@ -59,6 +61,7 @@ namespace LvlUp.Services
             _getUserId = getUserId;
             _getSessionId = getSessionId;
             _getSessionNum = getSessionNum;
+            _getAbTests = getAbTests;
             _getGeoData = getGeoData;
             _getPlatform = getPlatform;
             _getManufacturer = getManufacturer;
@@ -118,6 +121,7 @@ namespace LvlUp.Services
 
             // Populate context from current session and metadata
             PopulateRevenueContext(revenueData);
+            ApplyAbTests(revenueData);
 
             // Add to batch
             _revenueBatch.Add(revenueData);
@@ -404,6 +408,18 @@ namespace LvlUp.Services
             if (revenueData.revenueType == "IN_APP_PURCHASE" && !revenueData.currentLevelOrder.HasValue)
             {
                 revenueData.currentLevelOrder = _config.currentLevelOrder;
+            }
+        }
+
+        private void ApplyAbTests(RevenueData revenueData)
+        {
+            if (revenueData == null || revenueData.abTests != null)
+                return;
+
+            var abTests = _getAbTests?.Invoke();
+            if (abTests != null && abTests.Count > 0)
+            {
+                revenueData.abTests = abTests;
             }
         }
 

@@ -10,6 +10,9 @@ namespace LvlUp
     {
         private const string PLATFORM_OVERRIDE_KEY = "LvlUp.Debug.PlatformOverride";
         private const string ENVIRONMENT_OVERRIDE_KEY = "LvlUp.Debug.EnvironmentOverride";
+        private const string FORCE_AB_LAYER_KEY = "LvlUp.Debug.ForceAbLayerKey";
+        private const string FORCE_AB_TEST_KEY = "LvlUp.Debug.ForceAbTestKey";
+        private const string FORCE_AB_VARIANT_KEY = "LvlUp.Debug.ForceAbVariantKey";
 
         #region Platform Override
 
@@ -97,6 +100,91 @@ namespace LvlUp
 
         #endregion
 
+        #region AB Test Override
+
+        public static string ForceAbLayerKey
+        {
+            get
+            {
+                var value = PlayerPrefs.GetString(FORCE_AB_LAYER_KEY, "");
+                return string.IsNullOrEmpty(value) ? null : value;
+            }
+            set
+            {
+                if (!string.IsNullOrEmpty(value))
+                {
+                    PlayerPrefs.SetString(FORCE_AB_LAYER_KEY, value);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(FORCE_AB_LAYER_KEY);
+                }
+                PlayerPrefs.Save();
+            }
+        }
+
+        public static string ForceAbTestKey
+        {
+            get
+            {
+                var value = PlayerPrefs.GetString(FORCE_AB_TEST_KEY, "");
+                return string.IsNullOrEmpty(value) ? null : value;
+            }
+            set
+            {
+                if (!string.IsNullOrEmpty(value))
+                {
+                    PlayerPrefs.SetString(FORCE_AB_TEST_KEY, value);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(FORCE_AB_TEST_KEY);
+                }
+                PlayerPrefs.Save();
+            }
+        }
+
+        public static string ForceAbVariantKey
+        {
+            get
+            {
+                var value = PlayerPrefs.GetString(FORCE_AB_VARIANT_KEY, "");
+                return string.IsNullOrEmpty(value) ? null : value;
+            }
+            set
+            {
+                if (!string.IsNullOrEmpty(value))
+                {
+                    PlayerPrefs.SetString(FORCE_AB_VARIANT_KEY, value);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(FORCE_AB_VARIANT_KEY);
+                }
+                PlayerPrefs.Save();
+            }
+        }
+
+        public static bool HasForcedAbOverride =>
+            !string.IsNullOrEmpty(ForceAbTestKey) && !string.IsNullOrEmpty(ForceAbVariantKey);
+
+        public static void SetForcedAbOverride(string layerKey, string testKey, string variantKey)
+        {
+            ForceAbLayerKey = layerKey;
+            ForceAbTestKey = testKey;
+            ForceAbVariantKey = variantKey;
+        }
+
+        public static void ClearForcedAbOverride()
+        {
+            PlayerPrefs.DeleteKey(FORCE_AB_LAYER_KEY);
+            PlayerPrefs.DeleteKey(FORCE_AB_TEST_KEY);
+            PlayerPrefs.DeleteKey(FORCE_AB_VARIANT_KEY);
+            PlayerPrefs.Save();
+        }
+
+        #endregion
+
         /// <summary>
         /// Clear all debug overrides
         /// </summary>
@@ -104,10 +192,10 @@ namespace LvlUp
         {
             ClearPlatformOverride();
             ClearEnvironmentOverride();
+            ClearForcedAbOverride();
         }
     }
 }
-
 
 
 
