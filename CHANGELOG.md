@@ -5,6 +5,11 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-06-10
+
+### Added
+- `LvlUpSDK.Config.WaitUntilReadyAsync(float timeoutSeconds = 15f)` — awaitable variant of `WaitUntilReady`. Returns a standard `Task<bool>` (true once configs load, false on timeout) so it can be awaited directly or adapted (e.g. `.AsUniTask()`), without adding any UniTask dependency to the SDK. The callback-based `WaitUntilReady` remains as the underlying primitive.
+
 ## [1.5.0] - 2026-06-10
 
 ### Added

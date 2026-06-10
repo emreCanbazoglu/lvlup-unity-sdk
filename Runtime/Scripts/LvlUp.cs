@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using LvlUp.Models;
 using LvlUp.Services;
 
@@ -151,6 +152,19 @@ namespace LvlUp
                 }
 
                 manager.WaitUntilConfigReady(onReady, timeoutSeconds);
+            }
+
+            /// <summary>
+            /// Awaitable version of <see cref="WaitUntilReady(Action{bool}, float)"/>. Returns a Task
+            /// that completes with true once Remote Config has loaded (<see cref="IsReady"/>), or false
+            /// if the timeout elapses first. Returns a standard Task (no UniTask dependency), so it can
+            /// be awaited directly or adapted (e.g. <c>.AsUniTask()</c>). Never blocks forever.
+            /// </summary>
+            public static Task<bool> WaitUntilReadyAsync(float timeoutSeconds = 15f)
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                WaitUntilReady(ready => tcs.TrySetResult(ready), timeoutSeconds);
+                return tcs.Task;
             }
 
             /// <summary>
