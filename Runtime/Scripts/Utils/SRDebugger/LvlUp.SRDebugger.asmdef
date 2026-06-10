@@ -3,7 +3,8 @@
     "rootNamespace": "",
     "references": [
         "LvlUp.Runtime",
-        "StompyRobot.SRDebugger"
+        "StompyRobot.SRDebugger",
+        "StompyRobot.SRF"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

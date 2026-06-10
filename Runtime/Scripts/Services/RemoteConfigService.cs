@@ -24,6 +24,7 @@ namespace LvlUp.Services
         private bool _currentAbTestsForced = false;
         private bool _isInitialized = false;
         private bool _isFetching = false;
+        private bool _logConfigResult = false;
 
         // Events
         public event Action<ConfigsUpdatedEvent> OnConfigsUpdated;
@@ -39,7 +40,7 @@ namespace LvlUp.Services
         /// Initialize Remote Config Service
         /// Uses API key from LvlUpHttpClient - backend identifies game from API key
         /// </summary>
-        public void Initialize(LvlUpHttpClient httpClient, string environment = "production", bool debugLogs = false)
+        public void Initialize(LvlUpHttpClient httpClient, string environment = "production", bool debugLogs = false, bool logConfigResult = false)
         {
             if (_isInitialized)
             {
@@ -49,6 +50,7 @@ namespace LvlUp.Services
 
             _httpClient = httpClient;
             _currentEnvironment = environment;
+            _logConfigResult = logConfigResult;
 
             try
             {
@@ -326,6 +328,33 @@ namespace LvlUp.Services
             });
 
             Debug.Log($"[LvlUp] Loaded {configs.Count} configs (from cache: {isFromCache})");
+
+            if (_logConfigResult)
+                LogConfigResult(configs, isFromCache);
+        }
+
+        /// <summary>
+        /// Dump the full remote config result (every key/value and A/B assignment) to the console.
+        /// Gated behind LvlUpConfig.logRemoteConfigResult.
+        /// </summary>
+        private void LogConfigResult(List<ConfigData> configs, bool isFromCache)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"[LvlUp] Remote config result (environment: {_currentEnvironment}, from cache: {isFromCache}, forced A/B: {_currentAbTestsForced}):");
+
+            sb.AppendLine($"  Configs ({configs.Count}):");
+            foreach (var config in configs)
+            {
+                sb.AppendLine($"    - {config.key} = {config.GetValueAsString()}");
+            }
+
+            sb.AppendLine($"  A/B tests ({_abTests.Count}):");
+            foreach (var kvp in _abTests)
+            {
+                sb.AppendLine($"    - {kvp.Key} = {kvp.Value}");
+            }
+
+            Debug.Log(sb.ToString());
         }
 
         private string AppendQueryParameter(string endpoint, string key, string value)

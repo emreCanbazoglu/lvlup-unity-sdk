@@ -73,6 +73,9 @@ namespace LvlUp
         [Tooltip("Environment for remote config (production, staging, development)")]
         public string remoteConfigEnvironment = "production";
 
+        [Tooltip("Log the full remote config result (all keys/values and A/B assignments) to the console when configs load")]
+        public bool logRemoteConfigResult = false;
+
         /// <summary>
         /// Convert this scriptable object to LvlUpConfig
         /// </summary>
@@ -93,6 +96,8 @@ namespace LvlUp
                 autoTrackScenes = this.autoTrackScenes,
                 persistQueueToDisk = this.persistQueueToDisk,
                 enableCrashReporting = this.enableCrashReporting,
+                remoteConfigEnvironment = this.remoteConfigEnvironment,
+                logRemoteConfigResult = this.logRemoteConfigResult,
             };
         }
 

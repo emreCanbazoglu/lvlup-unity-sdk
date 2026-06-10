@@ -108,6 +108,13 @@ namespace LvlUp
         public int? currentLevelOrder = null;
 
         public string remoteConfigEnvironment = "production";
+
+        /// <summary>
+        /// Log the full remote config fetch result (all keys/values and A/B assignments) to the
+        /// console whenever configs are loaded. Useful for verifying what the backend returned.
+        /// Independent of <see cref="enableDebugLogs"/> so it can be toggled on its own.
+        /// </summary>
+        public bool logRemoteConfigResult = false;
     }
 }
 

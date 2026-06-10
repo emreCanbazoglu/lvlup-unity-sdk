@@ -5,6 +5,14 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-10
+
+### Added
+- `LvlUpConfig.logRemoteConfigResult` (and matching Inspector toggle on `LvlUpConfigScriptable`) — when enabled, logs the full Remote Config result (every key/value and A/B assignment, with environment and cache-source) to the console each time configs load. Independent of `enableDebugLogs` so it can be toggled on its own.
+
+### Changed
+- SR Debugger integration no longer forces the debug service to be created. Previously accessing `SRDebug.Instance` auto-created the SR Debugger service (via `SRServiceManager.GetService`) even on builds where the host app never enabled it. Registration now waits via the non-creating `SRServiceManager.HasService<IDebugService>()` check and only registers once the host app has created the service, giving up after a 30s timeout.
+
 ## [1.3.0] - 2026-06-04
 
 ### Added
