@@ -129,9 +129,29 @@ namespace LvlUp
         public static class Config
         {
             /// <summary>
-            /// Check if Remote Config is ready to use
+            /// Check if Remote Config is ready to use, i.e. configs have actually been loaded
+            /// (from server or cache). This is false until the first fetch completes, so it is
+            /// safe to wait on before reading config values.
             /// </summary>
-            public static bool IsReady => RemoteConfig != null && RemoteConfig.IsInitialized;
+            public static bool IsReady => RemoteConfig != null && RemoteConfig.HasLoadedConfigs;
+
+            /// <summary>
+            /// Wait until Remote Config has finished loading (<see cref="IsReady"/>), or until the
+            /// timeout elapses — whichever comes first. <paramref name="onReady"/> is invoked with
+            /// true once configs are ready, or false if the timeout was hit (callers should proceed
+            /// with defaults; the TryGet* methods return false until configs load). Never blocks forever.
+            /// </summary>
+            public static void WaitUntilReady(Action<bool> onReady, float timeoutSeconds = 15f)
+            {
+                var manager = Manager;
+                if (manager == null)
+                {
+                    onReady?.Invoke(false);
+                    return;
+                }
+
+                manager.WaitUntilConfigReady(onReady, timeoutSeconds);
+            }
 
             /// <summary>
             /// Try to get an integer config value

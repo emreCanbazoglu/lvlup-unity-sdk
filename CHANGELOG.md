@@ -5,6 +5,14 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-06-10
+
+### Added
+- `LvlUpSDK.Config.WaitUntilReady(Action<bool> onReady, float timeoutSeconds = 15f)` — waits until remote config has actually loaded (`IsReady`) and invokes the callback with `true`, or `false` if the timeout elapses first (e.g. offline with no valid cache). Bounded so callers never block indefinitely; on timeout, reads fall back to defaults. Coroutine-based and uses unscaled real time, so it is unaffected by `Time.timeScale`.
+
+### Changed
+- `LvlUpSDK.Config.IsReady` now reflects whether configs have **actually loaded** (from server or cache) rather than merely whether the service object was set up. Previously it was an alias for `RemoteConfigService.IsInitialized`, which becomes true immediately on construction — before any fetch — so `IsReady` could report ready while no config values were available. Backed by a new `RemoteConfigService.HasLoadedConfigs` flag set in `ProcessConfigs` and reset by `ClearCache`. The `TryGet*` accessors (which already gate on `IsReady`) now correctly withhold values until configs load.
+
 ## [1.4.1] - 2026-06-10
 
 ### Fixed

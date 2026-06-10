@@ -430,6 +430,37 @@ namespace LvlUp
         }
 
         /// <summary>
+        /// Wait until remote config has finished loading (configs available to read), or until the
+        /// timeout elapses. Invokes onReady(true) once configs are ready, or onReady(false) if the
+        /// timeout was hit first (e.g. offline with no valid cache) so callers can proceed with defaults.
+        /// Never blocks indefinitely. Uses unscaled real time so it is unaffected by Time.timeScale.
+        /// </summary>
+        public void WaitUntilConfigReady(Action<bool> onReady, float timeoutSeconds = 15f)
+        {
+            StartCoroutine(WaitUntilConfigReadyCoroutine(onReady, timeoutSeconds));
+        }
+
+        private IEnumerator WaitUntilConfigReadyCoroutine(Action<bool> onReady, float timeoutSeconds)
+        {
+            float startTime = Time.realtimeSinceStartup;
+
+            while (!(_isInitialized && _remoteConfigService != null && _remoteConfigService.HasLoadedConfigs))
+            {
+                if (Time.realtimeSinceStartup - startTime >= timeoutSeconds)
+                {
+                    Debug.LogWarning($"[LvlUp] Remote config not ready after {timeoutSeconds}s; " +
+                                     "proceeding without it (values will fall back to defaults).");
+                    onReady?.Invoke(false);
+                    yield break;
+                }
+
+                yield return null;
+            }
+
+            onReady?.Invoke(true);
+        }
+
+        /// <summary>
         /// Get current platform as string
         /// </summary>
         private string GetPlatform()

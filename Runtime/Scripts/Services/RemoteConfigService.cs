@@ -26,6 +26,10 @@ namespace LvlUp.Services
         private bool _isFetching = false;
         private bool _logConfigResult = false;
 
+        // True once configs have actually been loaded at least once (from server or cache).
+        // Distinct from _isInitialized, which only means the service has been set up and can fetch.
+        private bool _hasLoadedConfigs = false;
+
         // Events
         public event Action<ConfigsUpdatedEvent> OnConfigsUpdated;
 
@@ -313,6 +317,9 @@ namespace LvlUp.Services
             _currentAbTestsForced = configsResponse?.debug?.forcedAbOverride != null &&
                 configsResponse.debug.forcedAbOverride.forced;
 
+            // Configs are now loaded and safe to read.
+            _hasLoadedConfigs = true;
+
             // Save to cache if from server
             if (!isFromCache && configsResponse != null && !_currentAbTestsForced)
             {
@@ -583,6 +590,7 @@ namespace LvlUp.Services
             _configs.Clear();
             _abTests.Clear();
             _currentAbTestsForced = false;
+            _hasLoadedConfigs = false;
             Debug.Log("[LvlUp] Remote config cache cleared");
         }
 
@@ -603,9 +611,17 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Check if service is initialized
+        /// Check if service is initialized (set up and able to fetch). Note this becomes true
+        /// before any configs are loaded — use <see cref="HasLoadedConfigs"/> to know whether
+        /// config values are actually available to read.
         /// </summary>
         public bool IsInitialized => _isInitialized;
+
+        /// <summary>
+        /// True once configs have actually been loaded at least once (from server or cache),
+        /// i.e. config values are safe to read. This is the correct "ready" signal to wait on.
+        /// </summary>
+        public bool HasLoadedConfigs => _hasLoadedConfigs;
 
         /// <summary>
         /// Get current environment
