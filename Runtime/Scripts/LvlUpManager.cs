@@ -127,8 +127,8 @@ namespace LvlUp
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] SDK Initialized - Base URL: {_baseUrl}");
             
-            StartCoroutine(InitializeAsync());
-            
+            StartCoroutine(InitializeAsync(onComplete));
+
         }
 
         private void InitializeServices(string remoteConfigEnvironment)
@@ -214,8 +214,11 @@ namespace LvlUp
                 yield return StartCoroutine(FetchGeoLocationAsync());
             }
             
-            // Fetch remote configs
-            StartCoroutine(FetchRemoteConfigsAsync());
+            // Fetch remote configs and WAIT for completion before signalling init done.
+            // This guarantees that once onComplete fires (and MMLvlUpManager.WaitUntilInitialized
+            // returns), remote config values are actually available rather than still in-flight.
+            // FetchRemoteConfigsAsync has its own internal timeout, so this cannot hang init.
+            yield return StartCoroutine(FetchRemoteConfigsAsync());
 
             // Start automatic flush coroutine
             if (!_config.sendImmediately)

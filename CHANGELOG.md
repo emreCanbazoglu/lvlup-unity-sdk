@@ -5,6 +5,12 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-06-10
+
+### Fixed
+- **Initialization callback was never invoked.** `_Initialize` started the init coroutine without forwarding the `onComplete` callback (`StartCoroutine(InitializeAsync())`), so the success/failure callback passed to `LvlUpSDK.Initialize` never fired in the normal path. The callback is now forwarded, so completion-gated patterns (e.g. `MMLvlUpManager.WaitUntilInitialized`) work as intended.
+- **Remote config not ready when initialization completed.** The remote config fetch was started fire-and-forget during init, so `onComplete` (and any wait built on it) could resolve before configs were loaded — callers reading config values immediately got defaults. Init now awaits the config fetch (bounded by its existing internal timeout) before signalling completion. As a side effect, the auto-started session's A/B attribution is now populated from the config fetch rather than starting empty.
+
 ## [1.4.0] - 2026-06-10
 
 ### Added
