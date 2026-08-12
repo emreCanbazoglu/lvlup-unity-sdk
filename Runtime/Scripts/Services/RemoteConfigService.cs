@@ -567,11 +567,13 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// True if the backend granted the in-app debugger for this device (i.e. it is a
-        /// recognized dev device). Reads the server-injected <see cref="DebuggerEnabledKey"/>.
-        /// Returns false when the key is absent, so it never logs a "key not found" warning.
+        /// True if the backend recognized this device as a developer/test device (the device's
+        /// advertising ID matched the server-side dev-device list). Reads the server-injected
+        /// grant <see cref="DebuggerEnabledKey"/>. Returns false when the key is absent, so it
+        /// never logs a "key not found" warning. Use this to unlock dev-only features
+        /// (e.g. the in-app debugger).
         /// </summary>
-        public bool IsDebuggerEnabled()
+        public bool IsDeveloperDevice()
         {
             return HasKey(DebuggerEnabledKey) && GetBool(DebuggerEnabledKey, false);
         }

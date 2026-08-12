@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] - 2026-08-12
 
 ### Added
-- Server-side dev-device debugger gating. `LvlUpSDK.SetDeviceAdvertisingId(string)` forwards this device's advertising ID (IDFA/GAID) to the backend as the `X-Device-Ad-Id` request header on the remote config fetch — never in the URL. The backend checks it against a private dev-device list and injects the debugger grant only into that device's response; the list is never sent to clients. `LvlUpSDK.Config.IsDebuggerEnabled` reads the resulting `debugger_enabled` grant, so builds can gate the in-app debugger (e.g. `SRDebug.Init()`) on it instead of matching a broadcast `dev_devices` config locally. Provide the ad ID before `Initialize` so the first fetch includes it; setting it later re-fetches configs.
+- Server-side developer-device detection. `LvlUpSDK.SetDeviceAdvertisingId(string)` forwards this device's advertising ID (IDFA/GAID) to the backend as the `X-Device-Ad-Id` request header on the remote config fetch — never in the URL. The backend checks it against a private dev-device list and injects a grant only into that device's response; the list is never sent to clients. `LvlUpSDK.IsDeveloperDevice` reflects whether the backend recognized this device as a developer/test device, so builds can gate dev-only features — e.g. the in-app debugger via `SRDebug.Init()` — on it instead of matching a broadcast `dev_devices` config locally. Provide the ad ID before `Initialize` so the first fetch includes it; setting it later re-fetches configs.
 - `LvlUpHttpClient.Get<T>` now accepts an optional `extraHeaders` parameter (backward compatible) so per-request headers can be attached.
 
 ## [1.5.1] - 2026-06-10
