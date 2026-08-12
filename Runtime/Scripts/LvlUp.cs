@@ -39,6 +39,18 @@ namespace LvlUp
         /// </summary>
         public static LvlUpManager Manager => LvlUpManager.Instance;
 
+        /// <summary>
+        /// Provide this device's advertising ID (IDFA/GAID) so the backend can gate the in-app
+        /// debugger server-side (see LvlUpSDK.Config.IsDebuggerEnabled). It is sent as the
+        /// X-Device-Ad-Id header on config fetches — never in the URL — and the dev-device list is
+        /// never sent back to the client. Call BEFORE Initialize so the first fetch includes it;
+        /// if called later the configs are re-fetched. Pass null/empty to clear it.
+        /// </summary>
+        public static void SetDeviceAdvertisingId(string advertisingId)
+        {
+            LvlUpManager.SetDeviceAdvertisingId(advertisingId);
+        }
+
         #region Session Management
 
         /// <summary>
@@ -135,6 +147,15 @@ namespace LvlUp
             /// safe to wait on before reading config values.
             /// </summary>
             public static bool IsReady => RemoteConfig != null && RemoteConfig.HasLoadedConfigs;
+
+            /// <summary>
+            /// True if the backend granted the in-app debugger for this device (i.e. the device's
+            /// advertising ID matched a dev device server-side). Provide the ad ID via
+            /// <see cref="LvlUpSDK.SetDeviceAdvertisingId(string)"/>. False until configs load and
+            /// for non-dev devices. Gate your debugger (e.g. SRDebug.Init) on this instead of
+            /// matching a broadcast dev_devices list locally.
+            /// </summary>
+            public static bool IsDebuggerEnabled => IsReady && RemoteConfig.IsDebuggerEnabled();
 
             /// <summary>
             /// Wait until Remote Config has finished loading (<see cref="IsReady"/>), or until the

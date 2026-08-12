@@ -5,6 +5,12 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-08-12
+
+### Added
+- Server-side dev-device debugger gating. `LvlUpSDK.SetDeviceAdvertisingId(string)` forwards this device's advertising ID (IDFA/GAID) to the backend as the `X-Device-Ad-Id` request header on the remote config fetch — never in the URL. The backend checks it against a private dev-device list and injects the debugger grant only into that device's response; the list is never sent to clients. `LvlUpSDK.Config.IsDebuggerEnabled` reads the resulting `debugger_enabled` grant, so builds can gate the in-app debugger (e.g. `SRDebug.Init()`) on it instead of matching a broadcast `dev_devices` config locally. Provide the ad ID before `Initialize` so the first fetch includes it; setting it later re-fetches configs.
+- `LvlUpHttpClient.Get<T>` now accepts an optional `extraHeaders` parameter (backward compatible) so per-request headers can be attached.
+
 ## [1.5.1] - 2026-06-10
 
 ### Added

@@ -26,6 +26,15 @@ namespace LvlUp.Services
         private bool _isFetching = false;
         private bool _logConfigResult = false;
 
+        // Advertising ID of this device (IDFA/GAID), sent as the X-Device-Ad-Id header on the
+        // config fetch so the backend can decide server-side whether this is a dev device and
+        // grant the debugger. Never part of the request URL. Empty/blank => header omitted.
+        private string _deviceAdvertisingId;
+
+        // Config key the backend injects for recognized dev devices. Kept in sync with the
+        // server's DEV_DEVICE_DEBUG_KEY (default "debugger_enabled").
+        public const string DebuggerEnabledKey = "debugger_enabled";
+
         // True once configs have actually been loaded at least once (from server or cache).
         // Distinct from _isInitialized, which only means the service has been set up and can fetch.
         private bool _hasLoadedConfigs = false;
@@ -98,6 +107,17 @@ namespace LvlUp.Services
             _contextVersion = version;
             _contextCountry = country;
             _contextSegment = segment;
+        }
+
+        /// <summary>
+        /// Set this device's advertising ID (IDFA/GAID). Sent as the X-Device-Ad-Id header on
+        /// subsequent config fetches so the backend can gate the in-app debugger server-side.
+        /// The list of dev devices is never sent to the client. Safe to pass null/empty (header
+        /// is then omitted). Call before Initialize/fetch to have the first fetch include it.
+        /// </summary>
+        public void SetDeviceAdvertisingId(string advertisingId)
+        {
+            _deviceAdvertisingId = string.IsNullOrWhiteSpace(advertisingId) ? null : advertisingId.Trim();
         }
 
         /// <summary>
@@ -184,9 +204,17 @@ namespace LvlUp.Services
                     endpoint = AppendQueryParameter(endpoint, "forceAbVariantKey", LvlUpDebugSettings.ForceAbVariantKey);
                 }
 
+                // Send this device's advertising ID as a header (never in the URL) so the backend
+                // can decide server-side whether to grant the debugger. Omitted when unknown.
+                Dictionary<string, string> headers = null;
+                if (!string.IsNullOrEmpty(_deviceAdvertisingId))
+                {
+                    headers = new Dictionary<string, string> { { "X-Device-Ad-Id", _deviceAdvertisingId } };
+                }
+
                 // Use GET request - backend identifies game from API key in header
                 // Note: LvlUpHttpClient.Get<T> already wraps response in ApiResponse<T>
-                yield return _httpClient.Get<ConfigsResponse>(endpoint, 
+                yield return _httpClient.Get<ConfigsResponse>(endpoint,
                     callback: (response) =>
                     {
                         success = response.success;
@@ -199,7 +227,8 @@ namespace LvlUp.Services
                             Debug.LogWarning($"[LvlUp] Fetch failed (attempt {retryCount + 1}): {response.error}");
                         }
                         fetchComplete = true;
-                    }
+                    },
+                    extraHeaders: headers
                 );
 
                 // Wait for fetch to complete
@@ -535,6 +564,16 @@ namespace LvlUp.Services
         public bool HasKey(string key)
         {
             return _configs.ContainsKey(key);
+        }
+
+        /// <summary>
+        /// True if the backend granted the in-app debugger for this device (i.e. it is a
+        /// recognized dev device). Reads the server-injected <see cref="DebuggerEnabledKey"/>.
+        /// Returns false when the key is absent, so it never logs a "key not found" warning.
+        /// </summary>
+        public bool IsDebuggerEnabled()
+        {
+            return HasKey(DebuggerEnabledKey) && GetBool(DebuggerEnabledKey, false);
         }
 
         /// <summary>

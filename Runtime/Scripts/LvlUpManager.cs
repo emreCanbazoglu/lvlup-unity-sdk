@@ -35,6 +35,11 @@ namespace LvlUp
         private string _apiKey;
         private string _baseUrl;
 
+        // Host-provided device advertising ID (IDFA/GAID), forwarded to the backend as the
+        // X-Device-Ad-Id header on the config fetch for server-side dev-device debugger gating.
+        // Static so it can be set before the singleton exists (i.e. before Initialize).
+        private static string _deviceAdvertisingId;
+
         // Services
         private GeoLocationService _geoService;
         private CrashReporter _crashReporter;
@@ -356,6 +361,27 @@ namespace LvlUp
         /// </summary>
         public static RemoteConfigService RemoteConfig => _instance?._remoteConfigService;
 
+        /// <summary>
+        /// Set this device's advertising ID (IDFA/GAID) for server-side dev-device debugger gating.
+        /// It is forwarded to the backend as the X-Device-Ad-Id header on the config fetch; the
+        /// dev-device list itself is never sent to the client. Call this BEFORE Initialize so the
+        /// first fetch includes it. If called later, the configs are re-fetched so the grant can
+        /// take effect. Safe to pass null/empty to clear it.
+        /// </summary>
+        public static void SetDeviceAdvertisingId(string advertisingId)
+        {
+            _deviceAdvertisingId = string.IsNullOrWhiteSpace(advertisingId) ? null : advertisingId.Trim();
+
+            var service = _instance?._remoteConfigService;
+            if (service != null)
+            {
+                service.SetDeviceAdvertisingId(_deviceAdvertisingId);
+                // If configs already loaded, re-fetch so the header (and any grant) applies now.
+                if (service.HasLoadedConfigs)
+                    service.FetchAsync(_instance, null);
+            }
+        }
+
 
         /// <summary>
         /// Get current Remote Config environment
@@ -391,6 +417,11 @@ namespace LvlUp
             #if !UNITY_EDITOR
             _config.remoteConfigEnvironment = "production";
             #endif
+
+            // Forward the host-provided advertising ID (if any) so the backend can gate the
+            // in-app debugger server-side via the X-Device-Ad-Id header.
+            if (!string.IsNullOrEmpty(_deviceAdvertisingId))
+                _remoteConfigService.SetDeviceAdvertisingId(_deviceAdvertisingId);
 
             // Set platform context (always available)
             string platform = GetPlatform();

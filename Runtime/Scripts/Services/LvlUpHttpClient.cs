@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -27,12 +28,13 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Send a GET request
+        /// Send a GET request. Optional <paramref name="extraHeaders"/> are added on top of the
+        /// default headers (used e.g. to pass X-Device-Ad-Id on the remote config fetch).
         /// </summary>
-        public IEnumerator Get<T>(string endpoint, Action<ApiResponse<T>> callback)
+        public IEnumerator Get<T>(string endpoint, Action<ApiResponse<T>> callback, Dictionary<string, string> extraHeaders = null)
         {
             string url = $"{_baseUrl}/{endpoint.TrimStart('/')}";
-            
+
             if (_debugLogs)
                 Debug.Log($"[LvlUp] GET {url}");
 
@@ -41,6 +43,15 @@ namespace LvlUp.Services
                 request.timeout = (int)_timeout;
                 request.SetRequestHeader("X-API-Key", _apiKey);
                 request.SetRequestHeader("Content-Type", "application/json");
+
+                if (extraHeaders != null)
+                {
+                    foreach (var header in extraHeaders)
+                    {
+                        if (!string.IsNullOrEmpty(header.Key) && !string.IsNullOrEmpty(header.Value))
+                            request.SetRequestHeader(header.Key, header.Value);
+                    }
+                }
 
                 yield return request.SendWebRequest();
 
