@@ -74,8 +74,10 @@ namespace LvlUp.Services
         public void TrackMaxAdImpression(string format, string adUnitId, string networkName, 
             string placement, string creativeId, double revenue, string country = "")
         {
+            // Report the network that actually served the ad (e.g. "AppLovin", "Google AdMob");
+            // fall back to the mediation name only when MAX doesn't provide one.
             TrackAdImpressionCore(
-                adNetworkName: "MAX",
+                adNetworkName: string.IsNullOrWhiteSpace(networkName) ? "MAX" : networkName,
                 adFormat: format,
                 adUnitId: adUnitId,
                 placement: null,
