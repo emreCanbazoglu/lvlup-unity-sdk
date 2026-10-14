@@ -5,6 +5,14 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-10-14
+
+### Added
+- `LvlUpSDK.Ads.SetPlacement` and `ClearPlacement`, with public `LvlUpAdType`, for game-defined ad usage names across MAX and manual impression tracking.
+- Thread-safe placement state: one-shot interstitial/rewarded/app-open names expire after 120 seconds; banner/MRec names persist until changed or cleared. Custom names are trimmed and limited to 64 characters while preserving casing.
+- Placement precedence: explicit manual placement, then custom placement, then MAX placement. Known format aliases are matched case-insensitively; each impression consumes pending state once.
+- MAX interstitial and rewarded display-failure callbacks clear pending placements.
+
 ## [1.6.0] - 2026-08-12
 
 ### Added

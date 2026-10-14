@@ -202,6 +202,60 @@ Each impression captures:
 
 ---
 
+## Custom placements
+
+Use game-defined placement names to break down ad revenue by usage, even when every
+show uses the same MAX ad unit and MAX placement. For example, distinguish
+`game_win`, `game_lose`, `x2_coins`, and `revive` without changing MAX configuration.
+
+```csharp
+using LvlUp;
+
+// The game uses the same MAX placement ("default") for every interstitial.
+LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Interstitial, "game_win");
+MaxSdk.ShowInterstitial(interstitialAdUnitId, "default");
+
+// A later show of that same ad unit can carry a different game usage.
+LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Interstitial, "game_lose");
+MaxSdk.ShowInterstitial(interstitialAdUnitId, "default");
+
+LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Rewarded, "revive");
+MaxSdk.ShowRewardedAd(rewardedAdUnitId, "default");
+
+// Banner refreshes retain this name until it is changed or cleared.
+LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Banner, "home_screen");
+LvlUpSDK.Ads.ClearPlacement(LvlUpAdType.Banner);
+```
+
+Call `SetPlacement` immediately before showing the ad, after checking it is ready.
+The API can also be used with manual `LvlUpSDK.Revenue.TrackAdImpression` tracking
+and does not require MAX or SDK initialization to set or clear state. With MAX
+automatic tracking enabled, do not manually report the same impression again.
+
+- API: `LvlUpSDK.Ads.SetPlacement(LvlUpAdType adType, string placement)` and
+  `LvlUpSDK.Ads.ClearPlacement(LvlUpAdType adType)`.
+- `Interstitial`, `Rewarded`, and `AppOpen` are one-shot: the next impression of
+  that type consumes the name, including when an explicit manual placement wins.
+  Pending names expire after 120 seconds. MAX interstitial/rewarded display
+  failures clear the corresponding pending name.
+- `Banner` and `MRec` are sticky: all refresh impressions retain the name until
+  changed or cleared, with no expiry.
+- `SetPlacement` trims whitespace, clears on null/empty/whitespace, truncates to
+  64 characters, and preserves casing. State is shared per ad type, not per ad
+  unit; setting another name for the same type replaces the previous one.
+- Precedence: non-blank explicit manual `placement` > custom pending/sticky name
+  > MAX `adInfo.Placement` > none. Existing explicit and MAX values are preserved.
+- Format matching is case-insensitive: `INTER`/`INTERSTITIAL`/`FS`,
+  `REWARDED`/`REWARDED_VIDEO`/`RV`, `BANNER`, `MREC`, and `APPOPEN`/`APP_OPEN`.
+  Unknown formats do not look up or consume custom names.
+
+For manual tracking, omit `placement` to use the custom name:
+
+```csharp
+LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Rewarded, "x2_coins");
+LvlUpSDK.Revenue.TrackAdImpression("MyNetwork", "RV", 0.005, "rewarded_unit");
+```
+
 ## MAX Integration Details
 
 The MAX integration automatically:

@@ -19,6 +19,21 @@ public class RevenueTrackingExample : MonoBehaviour
         Debug.Log("[LvlUp] Sample Ad Impression tracked.");
     }
 
+    // Call after checking MAX readiness; use the same MAX placement for every usage.
+#if lvlup_max_enabled
+    public void ShowGameWinInterstitial(string adUnitId)
+    {
+        LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Interstitial, "game_win");
+        MaxSdk.ShowInterstitial(adUnitId, "default");
+    }
+
+    public void ShowReviveRewarded(string adUnitId)
+    {
+        LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Rewarded, "revive");
+        MaxSdk.ShowRewardedAd(adUnitId, "default");
+    }
+#endif
+
     [ContextMenu("Track Sample In-App Purchase")]
     public void TrackSampleInAppPurchase()
     {

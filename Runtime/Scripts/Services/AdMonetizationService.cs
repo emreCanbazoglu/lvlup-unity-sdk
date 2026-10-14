@@ -74,14 +74,14 @@ namespace LvlUp.Services
         public void TrackMaxAdImpression(string format, string adUnitId, string networkName, 
             string placement, string creativeId, double revenue, string country = "")
         {
-            TrackAdImpression(
+            TrackAdImpressionCore(
                 adNetworkName: "MAX",
                 adFormat: format,
                 adUnitId: adUnitId,
-                placement: placement,
+                placement: null,
                 creativeId: creativeId,
                 revenue: revenue,
-                country: country
+                maxPlacement: placement
             );
         }
 
@@ -92,19 +92,28 @@ namespace LvlUp.Services
             string placement = "", string creativeId = "", double revenue = 0.0,
             string country = "", string adUnitName = "", string customData = "")
         {
+            TrackAdImpressionCore(adNetworkName, adFormat, adUnitId, placement, creativeId, revenue);
+        }
+
+        private void TrackAdImpressionCore(string adNetworkName, string adFormat, string adUnitId,
+            string placement, string creativeId, double revenue, string maxPlacement = null)
+        {
             if (!_isInitialized)
             {
                 Debug.LogWarning("[LvlUp] AdMonetizationService not initialized. Call Initialize() first.");
                 return;
             }
 
-            // Track via delegate - LvlUpManager will handle context population
+            string resolvedPlacement = AdPlacementContext.Shared.Resolve(adFormat, placement, maxPlacement);
+
+            // The delegate receives a resolved placement; it must not consume the context again.
+            // LvlUpManager will handle context population.
             _trackAdImpressionDelegate?.Invoke(
                 adNetworkName, 
                 adFormat, 
                 revenue,
                 adUnitId, 
-                placement, 
+                resolvedPlacement,
                 creativeId
             );
             
