@@ -148,6 +148,14 @@ namespace LvlUp.Services
         public void TrackAdImpression(string adNetworkName, string adFormat, double revenue,
             string adUnitId = null, string placement = null, string creativeId = null)
         {
+            string resolvedPlacement = AdPlacementContext.Shared.Resolve(adFormat, placement);
+            TrackResolvedAdImpression(adNetworkName, adFormat, revenue, adUnitId, resolvedPlacement, creativeId);
+        }
+
+        // The ad-network service has already resolved and consumed custom placement state.
+        internal void TrackResolvedAdImpression(string adNetworkName, string adFormat, double revenue,
+            string adUnitId, string placement, string creativeId)
+        {
             var revenueData = new RevenueData
             {
                 revenueType = "AD_IMPRESSION",

@@ -52,6 +52,16 @@ namespace LvlUp.AdIntegration
                 TrackMaxAdRevenue("INTER", adInfo, adMonetizationService);
             };
 
+            MaxSdkCallbacks.Interstitial.OnAdDisplayFailedEvent += (adUnitId, errorInfo, adInfo) =>
+            {
+                AdPlacementContext.Shared.ClearPlacement(LvlUpAdType.Interstitial);
+            };
+
+            MaxSdkCallbacks.Rewarded.OnAdDisplayFailedEvent += (adUnitId, errorInfo, adInfo) =>
+            {
+                AdPlacementContext.Shared.ClearPlacement(LvlUpAdType.Rewarded);
+            };
+
             // Banner ads
             MaxSdkCallbacks.Banner.OnAdRevenuePaidEvent += (adUnitId, adInfo) =>
             {

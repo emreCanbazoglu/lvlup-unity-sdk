@@ -226,6 +226,14 @@ catch (System.Exception ex)
 
 ## API Reference
 
+### Ad placements and revenue
+
+- `LvlUpSDK.Ads.SetPlacement(adType, placement)` - Tag the next full-screen ad or all banner/MRec refreshes with a game-defined usage name.
+- `LvlUpSDK.Ads.ClearPlacement(adType)` - Clear a pending or sticky name.
+- `LvlUpSDK.Revenue.TrackAdImpression(adNetworkName, adFormat, revenue, ...)` - Track an impression manually; an explicit placement takes precedence over a custom name.
+
+See [Custom placements](AD_MONETIZATION_README.md#custom-placements) for expiry, precedence, and MAX examples.
+
 ### LvlUpManager
 
 Main singleton class for SDK interaction.

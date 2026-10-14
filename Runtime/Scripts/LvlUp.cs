@@ -475,6 +475,35 @@ namespace LvlUp
 
         #endregion
 
+        /// <summary>Tag automatic or manual ad impressions with game-defined placement names.</summary>
+        public static class Ads
+        {
+            /// <summary>
+            /// Set a custom placement (trimmed, up to 64 characters; blank clears it).
+            /// Interstitial, Rewarded and AppOpen consume it on the next impression and expire
+            /// after 120 seconds. Banner and MRec retain it until changed or cleared.
+            /// </summary>
+            /// <example><code>
+            /// LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Interstitial, "game_win");
+            /// MaxSdk.ShowInterstitial(adUnitId);
+            /// LvlUpSDK.Ads.SetPlacement(LvlUpAdType.Rewarded, "revive");
+            /// MaxSdk.ShowRewardedAd(rewardedAdUnitId);
+            /// </code></example>
+            public static void SetPlacement(LvlUpAdType adType, string placement)
+            {
+                AdPlacementContext.Shared.SetPlacement(adType, placement);
+            }
+
+            /// <summary>Clear a pending or sticky custom placement for this ad type.</summary>
+            /// <example><code>
+            /// LvlUpSDK.Ads.ClearPlacement(LvlUpAdType.Banner);
+            /// </code></example>
+            public static void ClearPlacement(LvlUpAdType adType)
+            {
+                AdPlacementContext.Shared.ClearPlacement(adType);
+            }
+        }
+
         #region Revenue Tracking
 
         /// <summary>

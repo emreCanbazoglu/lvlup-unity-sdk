@@ -140,7 +140,7 @@ namespace LvlUp
         {
             // Initialize Remote Config Service with environment from config
             _remoteConfigService.Initialize(_httpClient, remoteConfigEnvironment, _config.enableDebugLogs, _config.logRemoteConfigResult);
-            _adMonetizationService.Initialize(_revenueTrackingService.TrackAdImpression);
+            _adMonetizationService.Initialize(_revenueTrackingService.TrackResolvedAdImpression);
 
             // Initialize Unity IAP auto-capture if enabled and package is installed.
             // The IAP module lives in a separate assembly (LvlUp.IAP) that self-registers
