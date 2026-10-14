@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Placement precedence: explicit manual placement, then custom placement, then MAX placement. Known format aliases are matched case-insensitively; each impression consumes pending state once.
 - MAX interstitial and rewarded display-failure callbacks clear pending placements.
 
+### Fixed
+- MAX ad impressions now report the serving network (`adInfo.NetworkName`, e.g. "AppLovin", "Google AdMob") as `adNetworkName` instead of the hard-coded "MAX", so network breakdowns work. Falls back to "MAX" when MAX gives no network name.
+
 ## [1.6.0] - 2026-08-12
 
 ### Added
