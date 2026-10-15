@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using LvlUp.Models;
+using Newtonsoft.Json;
 
 namespace LvlUp.Services
 {
@@ -12,6 +13,9 @@ namespace LvlUp.Services
     /// </summary>
     public class EventTrackingService
     {
+        internal Action BeforeFlush { get; set; }
+        private bool _invokingBeforeFlush;
+
         private readonly LvlUpHttpClient _httpClient;
         private readonly LvlUpConfig _config;
         private readonly MonoBehaviour _coroutineRunner;
@@ -155,6 +159,13 @@ namespace LvlUp.Services
         /// </summary>
         public void FlushEventQueue(Action<ApiResponse> callback = null)
         {
+            // Includes automatic batch-size flushes as well as explicit SDK flushes.
+            if (!_invokingBeforeFlush)
+            {
+                _invokingBeforeFlush = true;
+                try { BeforeFlush?.Invoke(); }
+                finally { _invokingBeforeFlush = false; }
+            }
             if (_eventBatch.Count == 0 || _isSendingEvents)
             {
                 callback?.Invoke(new ApiResponse { success = true, message = "No events to flush" });
@@ -294,7 +305,8 @@ namespace LvlUp.Services
                 var eventsJson = new List<string>();
                 foreach (var evt in _eventBatch)
                 {
-                    string json = JsonUtility.ToJson(evt);
+                    // JsonUtility omits Dictionary properties, including full wallet payloads.
+                    string json = JsonConvert.SerializeObject(evt);
                     eventsJson.Add(json);
                 }
 
@@ -484,7 +496,7 @@ namespace LvlUp.Services
                                 continue;
                             }
                             
-                            var evt = JsonUtility.FromJson<LvlUpEvent>(json);
+                            var evt = JsonConvert.DeserializeObject<LvlUpEvent>(json);
                             if (evt != null)
                             {
                                 _eventBatch.Add(evt);

@@ -107,6 +107,13 @@ namespace LvlUp
         [System.NonSerialized]
         public int? currentLevelOrder = null;
 
+        /// <summary>Whether gameplay is between level_start and a level result.</summary>
+        [System.NonSerialized]
+        public bool inLevel = false;
+
+        /// <summary>Source coalescing window in real seconds. Zero disables coalescing.</summary>
+        public float economyCoalesceSeconds = 0f;
+
         public string remoteConfigEnvironment = "production";
 
         /// <summary>

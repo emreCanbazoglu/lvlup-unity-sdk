@@ -20,6 +20,8 @@ namespace LvlUp
             // Auto-capture current level order for IAP revenue attribution (ARPU-by-level).
             // Games with non-sequential level IDs can override via LvlUpSDK.Level.SetCurrent(order).
             LvlUpManager.Instance?.SetCurrentLevel(levelId);
+            var config = LvlUpManager.Instance?.GetConfig();
+            if (config != null) config.inLevel = true;
 
             var properties = new Dictionary<string, object>
             {
@@ -38,6 +40,7 @@ namespace LvlUp
             }
 
             LvlUpManager.Instance.TrackEvent(levelEvent);
+            LvlUpManager.Instance.EconomyTracking?.AutoSnapshot("level_start");
         }
 
         /// <summary>
@@ -64,6 +67,8 @@ namespace LvlUp
         /// <param name="additionalProperties">Optional additional properties</param>
         public static void TrackLevelComplete(int levelId, int score, float timeSeconds, Dictionary<string, object> additionalProperties = null)
         {
+            var config = LvlUpManager.Instance?.GetConfig();
+            if (config != null) config.inLevel = false;
             var properties = new Dictionary<string, object>
             {
                 { "levelId", levelId },
@@ -94,6 +99,8 @@ namespace LvlUp
         /// <param name="additionalProperties">Optional additional properties</param>
         public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, Dictionary<string, object> additionalProperties = null)
         {
+            var config = LvlUpManager.Instance?.GetConfig();
+            if (config != null) config.inLevel = false;
             var properties = new Dictionary<string, object>
             {
                 { "levelId", levelId },
@@ -125,6 +132,8 @@ namespace LvlUp
         /// <param name="additionalProperties">Optional additional properties</param>
         public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, Dictionary<string, object> additionalProperties = null)
         {
+            var config = LvlUpManager.Instance?.GetConfig();
+            if (config != null) config.inLevel = false;
             var properties = new Dictionary<string, object>
             {
                 { "levelId", levelId },
@@ -166,6 +175,8 @@ namespace LvlUp
         /// <param name="additionalProperties">Optional additional properties</param>
         public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, float objectiveProgress, Dictionary<string, object> additionalProperties = null)
         {
+            var config = LvlUpManager.Instance?.GetConfig();
+            if (config != null) config.inLevel = false;
             var properties = new Dictionary<string, object>
             {
                 { "levelId", levelId },

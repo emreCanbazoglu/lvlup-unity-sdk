@@ -5,6 +5,17 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-10-15
+
+### Added
+- Wallet tracking through `LvlUpSDK.Economy`: resource registration, balance providers, sources, sinks, trades with shared transaction ids, and full-wallet snapshots on the normal event queue.
+- Automatic level order and in-level context on flows; provider-backed snapshots on session and level starts, including registered zero balances.
+- Optional source coalescing via `LvlUpConfig.economyCoalesceSeconds` (default off), flushed on expiry, resource spends/trades, snapshots, SDK flush, pause and quit.
+- Validation and sanitization with logged, contained failures, plus EditMode economy tests.
+
+### Fixed
+- Event queue persistence now preserves dictionary properties with the existing Newtonsoft serializer, including nested wallet snapshots on pause/quit. Existing persisted JSON remains readable.
+
 ## [1.7.0] - 2026-10-14
 
 ### Added

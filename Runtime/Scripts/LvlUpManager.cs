@@ -46,6 +46,7 @@ namespace LvlUp
         private RemoteConfigService _remoteConfigService;
         private AdMonetizationService _adMonetizationService;
         private EventTrackingService _eventTrackingService;
+        internal EconomyTrackingService EconomyTracking { get; private set; }
         private RevenueTrackingService _revenueTrackingService;
         private SessionManagementService _sessionManagementService;
         
@@ -165,6 +166,9 @@ namespace LvlUp
             
             CreateSessionManagementService();
             CreateEventTrackingService();
+            EconomyTracking = new EconomyTrackingService(_config,
+                (name, properties) => TrackEvent(name, properties));
+            _eventTrackingService.BeforeFlush = () => EconomyTracking.Flush();
             CreateRevenueTrackingService();
         }
 
@@ -206,7 +210,8 @@ namespace LvlUp
                 this,
                 GetCachedGeoData,
                 sessionId => _crashReporter.SetSessionId(sessionId),
-                userId => _crashReporter?.SetUserId(userId)
+                userId => _crashReporter?.SetUserId(userId),
+                () => EconomyTracking?.AutoSnapshot("session_start")
             );
         }
 
@@ -293,15 +298,16 @@ namespace LvlUp
 
         private void OnApplicationPause(bool pauseStatus)
         {
-            if (!_isInitialized || !_config.autoTrackSessions)
+            if (!_isInitialized)
                 return;
 
             if (pauseStatus)
             {
-                if (_config.autoTrackAppLifecycle)
+                if (_config.autoTrackSessions && _config.autoTrackAppLifecycle)
                     TrackEvent("app_paused", null);
                 
                 // Persist any pending events and revenue before going to background
+                EconomyTracking?.Flush();
                 _eventTrackingService?.PersistEvents();
                 _revenueTrackingService?.PersistRevenue();
                 
@@ -310,12 +316,13 @@ namespace LvlUp
             }
             else
             {
-                if (_config.autoTrackAppLifecycle)
+                if (_config.autoTrackSessions && _config.autoTrackAppLifecycle)
                     TrackEvent("app_resumed", null);
             }
 
             // Delegate session management to service
-            _sessionManagementService?.OnApplicationPause(pauseStatus);
+            if (_config.autoTrackSessions)
+                _sessionManagementService?.OnApplicationPause(pauseStatus);
         }
 
         private void Update()
@@ -323,6 +330,7 @@ namespace LvlUp
             // Safety check: Restart heartbeat if session exists but coroutine stopped
             if (_isInitialized)
             {
+                EconomyTracking?.FlushExpired();
                 _sessionManagementService?.RestartHeartbeatIfNeeded();
             }
         }
@@ -337,13 +345,15 @@ namespace LvlUp
             if (hasActiveSession && _config.autoTrackAppLifecycle)
                 TrackEvent("app_quit", null);
 
+            EconomyTracking?.Flush();
+            _eventTrackingService?.PersistEvents();
+
             // Best-effort session close: queue an end request for next launch if quit happens too fast.
             _sessionManagementService?.HandleApplicationQuit();
 
             if (hasActiveSession)
             {
-                // Persist events and revenue before quitting
-                _eventTrackingService?.PersistEvents();
+                // Events (including coalesced sources) were persisted above.
                 _revenueTrackingService?.PersistRevenue();
 
                 FlushEventQueue();

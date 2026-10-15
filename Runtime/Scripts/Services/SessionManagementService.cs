@@ -18,6 +18,7 @@ namespace LvlUp.Services
         private readonly Func<GeoData> _getGeoData;
         private readonly Action<string> _onSessionIdChanged;
         private readonly Action<string> _onUserIdChanged;
+        private readonly Action _onSessionStarted;
 
         // Session tracking
         private SessionData _currentSession;
@@ -55,7 +56,8 @@ namespace LvlUp.Services
             MonoBehaviour coroutineRunner,
             Func<GeoData> getGeoData,
             Action<string> onSessionIdChanged,
-            Action<string> onUserIdChanged)
+            Action<string> onUserIdChanged,
+            Action onSessionStarted = null)
         {
             _httpClient = httpClient;
             _config = config;
@@ -63,6 +65,7 @@ namespace LvlUp.Services
             _getGeoData = getGeoData;
             _onSessionIdChanged = onSessionIdChanged;
             _onUserIdChanged = onUserIdChanged;
+            _onSessionStarted = onSessionStarted;
         }
 
         /// <summary>
@@ -132,6 +135,8 @@ namespace LvlUp.Services
                     if (_config.enableDebugLogs)
                         Debug.LogWarning($"[LvlUp] Failed to start session (offline?). Queued for retry. Total pending: {_pendingSessionStarts.Count}");
                 }
+                // A logical session also starts offline; retries must not duplicate its snapshot.
+                _onSessionStarted?.Invoke();
                 callback?.Invoke(response);
             }));
         }

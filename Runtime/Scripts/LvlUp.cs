@@ -151,6 +151,73 @@ namespace LvlUp
 
         #endregion
 
+        #region Economy Tracking
+
+        /// <summary>Wallet telemetry. Apply changes to the wallet before tracking them.</summary>
+        public static class Economy
+        {
+            private static EconomyTrackingService Service
+            {
+                get
+                {
+                    var manager = Manager;
+                    if (manager != null && manager.IsInitialized()) return manager.EconomyTracking;
+                    UnityEngine.Debug.LogError("[LvlUp] SDK not initialized. Call Initialize() first.");
+                    return null;
+                }
+            }
+
+            /// <summary>Register a wallet resource and its type. Ids are lower-cased and sanitized.</summary>
+            public static void RegisterResource(string resourceId, ResourceType type)
+            {
+                Service?.RegisterResource(resourceId, type);
+            }
+
+            /// <summary>Supply current balances after wallet mutations. Pass null to remove the provider.</summary>
+            public static void SetBalanceProvider(Func<IReadOnlyDictionary<string, double>> provider)
+            {
+                Service?.SetBalanceProvider(provider);
+            }
+
+            /// <summary>Track an actual gain after clamping. Missing balanceAfter is read from the provider.</summary>
+            /// <param name="resourceId">Wallet resource id.</param>
+            /// <param name="amount">Actual positive balance change, never the requested grant.</param>
+            /// <param name="reason">GameBase worth source id, lower-cased and sanitized.</param>
+            /// <param name="balanceAfter">Balance after applying the gain.</param>
+            /// <param name="itemId">Optional item or store product id, up to 64 characters.</param>
+            /// <param name="type">Optional override of the registered resource type.</param>
+            public static void Source(string resourceId, double amount, string reason, double? balanceAfter = null,
+                string itemId = null, ResourceType? type = null)
+            {
+                Service?.Source(resourceId, amount, reason, balanceAfter, itemId, type);
+            }
+
+            /// <summary>Track an actual spend after clamping. Missing balanceAfter is read from the provider.</summary>
+            public static void Sink(string resourceId, double amount, string reason, double? balanceAfter = null,
+                string itemId = null, ResourceType? type = null)
+            {
+                Service?.Sink(resourceId, amount, reason, balanceAfter, itemId, type);
+            }
+
+            /// <summary>Track every exchange leg with one generated transaction id, after mutating the wallet.
+            /// Requires a balance provider. Trades are never coalesced.</summary>
+            public static void Trade(string reason, string itemId,
+                IEnumerable<(string resourceId, double amount)> sinks,
+                IEnumerable<(string resourceId, double amount)> sources)
+            {
+                Service?.Trade(reason, itemId, sinks, sources);
+            }
+
+            /// <summary>Track a manual full-wallet snapshot. Null balances asks the provider.
+            /// Includes registered resources with zero balances; maximum 50 resource keys.</summary>
+            public static void Snapshot(IReadOnlyDictionary<string, double> balances = null)
+            {
+                Service?.Snapshot(balances);
+            }
+        }
+
+        #endregion
+
         #region Remote Config
 
         /// <summary>

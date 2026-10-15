@@ -1,0 +1,8 @@
+{
+    "name": "LvlUp.Tests.Editor",
+    "rootNamespace": "LvlUp.Tests",
+    "references": ["LvlUp.Runtime"],
+    "includePlatforms": ["Editor"],
+    "optionalUnityReferences": ["TestAssemblies"],
+    "autoReferenced": false
+}
