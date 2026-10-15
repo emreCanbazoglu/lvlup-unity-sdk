@@ -166,6 +166,87 @@ Debug.Log($"Player completed {progress.completedCheckpoints} checkpoints");
 ```
 
 
+## Economy (wallet) tracking
+
+Use `LvlUpSDK.Economy` after initialization. Track each change once, where the wallet is
+mutated. `amount` is the actual change after clamping; skip zero changes. Pass the
+GameBase `IWorthSource.GetSourceId()` / `WorthSourceId` as `reason`.
+
+```csharp
+using System.Collections.Generic;
+using LvlUp;
+using LvlUp.Models;
+
+// After Initialize returns, before the first session starts:
+// use autoTrackSessions = false if setup must precede the initial session snapshot.
+LvlUpSDK.Economy.RegisterResource("coin", ResourceType.Currency);
+LvlUpSDK.Economy.RegisterResource("gem", ResourceType.Currency);
+LvlUpSDK.Economy.RegisterResource("booster_a", ResourceType.Booster);
+LvlUpSDK.Economy.SetBalanceProvider(() => new Dictionary<string, double>
+{
+    { "coin", wallet.Coins },
+    { "gem", wallet.Gems },
+    { "booster_a", wallet.BoosterA }
+});
+LvlUpSDK.Session.Start(playerId);
+
+// GameBase-style gain: use the worth source id, and measure the real applied delta.
+double before = wallet.Coins;
+wallet.IncreaseCoins(requestedGrant); // May clamp at the wallet maximum.
+double gained = wallet.Coins - before;
+if (gained > 0)
+    LvlUpSDK.Economy.Source("coin", gained, worthSource.GetSourceId(), wallet.Coins);
+
+// Spend: likewise measure the real decrease. Balance may be omitted with a provider.
+before = wallet.Coins;
+wallet.DecreaseCoins(continueCost);
+double spent = before - wallet.Coins;
+if (spent > 0)
+    LvlUpSDK.Economy.Sink("coin", spent, "continue");
+
+// After consuming a booster (do not derive spends from level-event booster properties):
+wallet.UseBoosterA();
+LvlUpSDK.Economy.Sink("booster_a", 1, "booster_use");
+
+// After applying a coin-to-booster exchange, report its actual applied legs together.
+// Trade reads final balances once and generates one shared transactionId.
+double coinsBefore = wallet.Coins;
+double boostersBefore = wallet.BoosterA;
+wallet.BuyBoosterA();
+LvlUpSDK.Economy.Trade("booster_purchase", "booster_a",
+    sinks: new[] { ("coin", coinsBefore - wallet.Coins) },
+    sources: new[] { ("booster_a", wallet.BoosterA - boostersBefore) });
+
+LvlUpSDK.Economy.Snapshot(); // Manual full-wallet snapshot from the provider.
+```
+
+The wallet and worth-source methods above represent your game's own APIs. Never
+also send separate Source/Sink calls for the same trade. Only report nonzero trade
+legs after a successful exchange.
+
+The SDK sends `economy_flow` and `economy_snapshot` through the ordinary event queue.
+Resource ids and reasons are lower-cased, with unsupported characters replaced by
+`_`. Resource ids must contain 1–64 characters; reasons are limited to 64 characters
+and empty reasons become `unknown`. Item ids retain their casing and must be at most
+64 characters. Invalid inputs and provider failures are logged and dropped.
+
+With a provider installed, snapshots run automatically on session start and after
+each `LvlUpEvents.TrackLevelStart` event. Registered resources missing from a snapshot
+are included as zero; provider-only resources are also included. Snapshots have at
+most 50 keys; an oversized wallet is logged and dropped. Explicit manual balances
+can be supplied to `Snapshot(balances)` without a provider. Missing flow balances
+require a provider containing that resource; a missing flow balance never defaults
+to zero.
+
+Flows capture `levelOrder` when known and `inLevel` from standard level helpers.
+Snapshots capture `levelOrder`. Optional `LvlUpConfig.economyCoalesceSeconds` defaults
+to `0` (off). A positive value merges sources sharing resource, reason, level order,
+in-level state and item id, retaining the final balance. Sinks and trades are never
+merged. Pending sources flush on window expiry, spends/trades of that resource,
+snapshots, SDK flush, pause and quit. Call the economy API on Unity's main thread,
+as with the other tracking APIs. The tuple-based Trade API requires Unity 2021+
+with C# 9 support.
+
 ## Advanced Usage
 
 ### Offline Event Queuing
