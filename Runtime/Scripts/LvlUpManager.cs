@@ -48,6 +48,7 @@ namespace LvlUp
         private EventTrackingService _eventTrackingService;
         internal EconomyTrackingService EconomyTracking { get; private set; }
         private RevenueTrackingService _revenueTrackingService;
+        internal AttributionTrackingService AttributionTracking { get; private set; }
         private SessionManagementService _sessionManagementService;
         
         // Cached geo data
@@ -155,6 +156,7 @@ namespace LvlUp
             _sessionManagementService.Initialize();
             _eventTrackingService.Initialize();
             _revenueTrackingService.Initialize();
+            AttributionTracking.Initialize();
         }
 
         private void CreateServices()
@@ -170,6 +172,8 @@ namespace LvlUp
                 (name, properties) => TrackEvent(name, properties));
             _eventTrackingService.BeforeFlush = () => EconomyTracking.Flush();
             CreateRevenueTrackingService();
+            AttributionTracking = new AttributionTrackingService(_httpClient, _config, this,
+                () => _sessionManagementService.GetCurrentUserId());
         }
 
         private void CreateRevenueTrackingService()
@@ -211,7 +215,11 @@ namespace LvlUp
                 GetCachedGeoData,
                 sessionId => _crashReporter.SetSessionId(sessionId),
                 userId => _crashReporter?.SetUserId(userId),
-                () => EconomyTracking?.AutoSnapshot("session_start")
+                () =>
+                {
+                    EconomyTracking?.AutoSnapshot("session_start");
+                    AttributionTracking?.OnSessionStarted();
+                }
             );
         }
 
@@ -289,6 +297,7 @@ namespace LvlUp
 
         private void OnDestroy()
         {
+            AttributionTracking?.Dispose();
             // Clean up singleton reference when destroyed
             if (_instance == this)
             {
@@ -330,6 +339,7 @@ namespace LvlUp
             // Safety check: Restart heartbeat if session exists but coroutine stopped
             if (_isInitialized)
             {
+                AttributionTracking?.Tick();
                 EconomyTracking?.FlushExpired();
                 _sessionManagementService?.RestartHeartbeatIfNeeded();
             }

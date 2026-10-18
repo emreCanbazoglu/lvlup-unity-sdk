@@ -30,6 +30,27 @@ Official Unity SDK for the LvlUp Analytics Platform.
 
 Copy all files from this repository into your Unity project's `Assets/LvlUp/` folder.
 
+## Adjust install attribution (1.9.0)
+
+For games already shipping Adjust Unity SDK 5.6.0 under `Assets/Adjust`, add
+`lvlup_adjust_enabled` to **Player Settings > Other Settings > Scripting Define Symbols**
+for both **iOS** and **Android**. No other LvlUp setup is required.
+
+LvlUp reads Adjust on initialization and each new session, including Organic installs.
+If attribution is not ready, it retries after 10, 30, 60, 120 and 300 seconds, then waits
+until the next session. Callbacks are processed on the main thread. Only changes to
+normalized attribution or user/device identity are sent; the last successful value is
+saved locally. Failed sends remain pending for the next session in the current SDK instance.
+The observation timestamp does not trigger a resend. Without the define, manual
+attribution remains available and no Adjust API is referenced by C# code.
+
+```csharp
+// After LvlUp initialization:
+LvlUpSDK.Attribution.Refresh(); // Re-read Adjust immediately.
+LvlUpSDK.Attribution.Set("Organic"); // Manual provider, also usable without Adjust.
+LvlUpSDK.Attribution.Set("Partner", campaign: "autumn", trackerName: "promo");
+```
+
 ## Quick Start
 
 ### 1. Initialize the SDK

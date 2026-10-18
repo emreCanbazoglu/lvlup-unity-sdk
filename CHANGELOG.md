@@ -5,6 +5,14 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-10-18
+
+### Added
+- Adjust install attribution sent to `analytics/attribution` on initialization and each session, enabled with `lvlup_adjust_enabled` (or the `com.adjust.sdk` UPM package).
+- Main-thread callback handling and bounded retries after 10, 30, 60, 120 and 300 seconds when Adjust attribution is not available yet.
+- Normalized payload comparison against the last successful locally persisted value; failed sends remain pending for the next session.
+- `LvlUpSDK.Attribution.Set(...)` for manual attribution and `LvlUpSDK.Attribution.Refresh()` for an immediate Adjust read, plus EditMode coverage.
+
 ## [1.8.0] - 2026-10-15
 
 ### Added
