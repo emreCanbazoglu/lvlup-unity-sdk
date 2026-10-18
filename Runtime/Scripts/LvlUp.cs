@@ -571,6 +571,38 @@ namespace LvlUp
             }
         }
 
+        /// <summary>Install attribution for acquisition reporting. Call after SDK initialization.</summary>
+        public static class Attribution
+        {
+            /// <summary>
+            /// Send manual attribution for testing or non-Adjust providers (provider is "manual").
+            /// Values are trimmed; null values become empty strings. Unchanged successful values
+            /// are skipped. Failed sends are retried at the next session in this SDK instance.
+            /// Calls before SDK initialization have no effect.
+            /// </summary>
+            /// <example><code>
+            /// LvlUpSDK.Attribution.Set("Organic");
+            /// LvlUpSDK.Attribution.Set("Partner", campaign: "autumn", trackerName: "promo");
+            /// </code></example>
+            public static void Set(string network, string campaign = null, string adgroup = null,
+                string creative = null, string trackerName = null)
+            {
+                Manager?.AttributionTracking?.Set(network, campaign, adgroup, creative, trackerName);
+            }
+
+            /// <summary>
+            /// Re-read Adjust attribution now, with bounded retries if it is not yet available.
+            /// Requires lvlup_adjust_enabled; otherwise has no effect. Call after initialization.
+            /// </summary>
+            /// <example><code>
+            /// LvlUpSDK.Attribution.Refresh();
+            /// </code></example>
+            public static void Refresh()
+            {
+                Manager?.AttributionTracking?.Refresh();
+            }
+        }
+
         #region Revenue Tracking
 
         /// <summary>

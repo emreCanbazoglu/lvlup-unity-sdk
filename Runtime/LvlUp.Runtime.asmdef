@@ -3,7 +3,8 @@
     "rootNamespace": "LvlUp",
     "references": [
         "Unity.Nuget.Newtonsoft-Json",
-        "MaxSdk.Scripts"
+        "MaxSdk.Scripts",
+        "AdjustSdk.Scripts"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -17,8 +18,12 @@
             "name": "com.applovin.mediation",
             "expression": "",
             "define": "lvlup_max_enabled"
+        },
+        {
+            "name": "com.adjust.sdk",
+            "expression": "",
+            "define": "lvlup_adjust_enabled"
         }
     ],
     "noEngineReferences": false
 }
-
