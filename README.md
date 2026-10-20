@@ -336,6 +336,14 @@ catch (System.Exception ex)
 
 See [Custom placements](AD_MONETIZATION_README.md#custom-placements) for expiry, precedence, and MAX examples.
 
+### In-app purchase placements (1.10.0+)
+
+- `LvlUpSDK.Revenue.SetPurchasePlacement(placement, productId = null)` - Record where the next purchase (of one product, or any) starts; call it right before opening the store sheet. Consumed by the next matching purchase, expires after 10 minutes.
+- `LvlUpSDK.Revenue.ClearPurchasePlacement(productId = null)` - Clear it when a purchase is cancelled or fails.
+- `LvlUpSDK.Revenue.TrackInAppPurchase(..., placement: "shop")` - An explicit placement takes precedence over a pending one.
+
+See [Revenue tracking API](REVENUE_TRACKING_API.md#lvlupsdkrevenuesetpurchaseplacement-1100) for precedence and a Unity IAP example.
+
 ### LvlUpManager
 
 Main singleton class for SDK interaction.

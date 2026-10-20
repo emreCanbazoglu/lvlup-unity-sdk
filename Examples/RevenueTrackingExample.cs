@@ -47,10 +47,18 @@ public class RevenueTrackingExample : MonoBehaviour
             store: "APPLE_APP_STORE",
             productName: "100 Coins",
             quantity: 1,
-            isVerified: true
+            isVerified: true,
+            placement: "shop"
         );
 
         Debug.Log("[LvlUp] Sample In-App Purchase tracked.");
+    }
+
+    // With Unity IAP auto-capture, record the placement before opening the store sheet;
+    // TrackPurchase(product) in ProcessPurchase consumes it.
+    public void RecordOutOfMovesPurchasePlacement()
+    {
+        LvlUpSDK.Revenue.SetPurchasePlacement("out_of_moves", "com.game.moves_5");
     }
     
     [ContextMenu("Flush Revenue Queue")]

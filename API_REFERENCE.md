@@ -307,32 +307,65 @@ LvlUpSDK.Revenue.TrackAdImpression(
 
 ##### LvlUpSDK.Revenue.TrackInAppPurchase
 ```csharp
-public static void TrackInAppPurchase(string productId, double revenue, string transactionId,
-    string store = null, string productName = null, int quantity = 1, bool isVerified = false)
+public static void TrackInAppPurchase(string productId, double revenue, string currency, string transactionId,
+    double revenueUSD = 0, string store = null, string productName = null, string productType = null,
+    int quantity = 1, bool isVerified = false, string placement = null)
 ```
 Convenience method for tracking in-app purchases.
 
 **Parameters:**
 - `productId` (string): Product identifier (e.g., "com.game.coins_100")
-- `revenue` (double): Purchase amount in USD
-- `transactionId` (string): Unique transaction ID
+- `revenue` (double): Purchase amount in `currency`
+- `currency` (string): ISO 4217 currency code (e.g., "USD", "EUR")
+- `transactionId` (string): Unique transaction ID (used for deduplication)
+- `revenueUSD` (double, optional): Amount already converted to USD; 0 lets the backend convert (default: 0)
 - `store` (string, optional): Store name (e.g., "APPLE_APP_STORE", "GOOGLE_PLAY")
 - `productName` (string, optional): Human-readable product name
+- `productType` (string, optional): "CONSUMABLE", "NON_CONSUMABLE" or "SUBSCRIPTION"
 - `quantity` (int, optional): Quantity purchased (default: 1)
 - `isVerified` (bool, optional): Whether purchase is verified (default: false)
+- `placement` (string, optional, 1.10.0+): Where in the game the purchase started (e.g., "shop", "offer_popup"). Trimmed, up to 64 characters. When omitted, a pending `SetPurchasePlacement` is used.
 
 **Example:**
 ```csharp
 LvlUpSDK.Revenue.TrackInAppPurchase(
     productId: "com.game.coins_100",
     revenue: 0.99,
+    currency: "USD",
     transactionId: "txn_123456789",
     store: "APPLE_APP_STORE",
     productName: "100 Coins",
     quantity: 1,
-    isVerified: true
+    isVerified: true,
+    placement: "shop"
 );
 ```
+
+##### LvlUpSDK.Revenue.SetPurchasePlacement (1.10.0+)
+```csharp
+public static void SetPurchasePlacement(string placement, string productId = null)
+```
+Record where in the game the next purchase starts. Call it right before opening the store sheet. Used by
+`TrackPurchase(product)` auto-capture and by `TrackInAppPurchase` calls without a `placement` argument.
+
+- `placement` (string): Placement name (e.g., "shop", "out_of_moves"). Trimmed, up to 64 characters; blank clears it.
+- `productId` (string, optional): Only a purchase of this product consumes it. Omit to apply it to whichever product is bought next.
+
+The next matching purchase consumes it; it expires after 10 minutes so an abandoned purchase cannot label a
+later one. Precedence: explicit `placement` argument, then the product's placement, then the any-product one.
+
+**Example:**
+```csharp
+LvlUpSDK.Revenue.SetPurchasePlacement("out_of_moves", "com.game.moves_5");
+storeController.InitiatePurchase("com.game.moves_5");
+```
+
+##### LvlUpSDK.Revenue.ClearPurchasePlacement (1.10.0+)
+```csharp
+public static void ClearPurchasePlacement(string productId = null)
+```
+Clear the pending placement for one product, or every pending placement when `productId` is omitted.
+Call it when a purchase is cancelled or fails.
 
 ##### LvlUpSDK.Revenue.Flush
 ```csharp

@@ -22,11 +22,13 @@ LvlUpSDK.Revenue.TrackAdImpression(
 LvlUpSDK.Revenue.TrackInAppPurchase(
     productId: "com.game.coins_100",
     revenue: 0.99,
+    currency: "USD",
     transactionId: "txn_123456789",
     store: "APPLE_APP_STORE",
     productName: "100 Coins",
     quantity: 1,
-    isVerified: true
+    isVerified: true,
+    placement: "shop"
 );
 
 // Flush revenue queue manually
@@ -93,10 +95,13 @@ Convenience method for tracking in-app purchases.
 
 **Parameters:**
 - `productId` (string): Product identifier (e.g., "com.game.coins_100")
-- `revenue` (double): Purchase amount in USD
-- `transactionId` (string): Unique transaction ID
+- `revenue` (double): Purchase amount in `currency`
+- `currency` (string): ISO 4217 currency code (e.g., "USD", "EUR")
+- `transactionId` (string): Unique transaction ID (used for deduplication)
+- `revenueUSD` (double, optional): Amount already converted to USD; 0 lets the backend convert (default: 0)
 - `store` (string, optional): Store name (e.g., "APPLE_APP_STORE", "GOOGLE_PLAY")
 - `productName` (string, optional): Human-readable product name
+- `productType` (string, optional): "CONSUMABLE", "NON_CONSUMABLE" or "SUBSCRIPTION"
 - `quantity` (int, optional): Quantity purchased (default: 1)
 - `isVerified` (bool, optional): Whether purchase is verified (default: false)
 - `placement` (string, optional, 1.10.0+): Where in the game the purchase started (e.g., "shop", "offer_popup"). Trimmed, up to 64 characters. When omitted, a pending `SetPurchasePlacement` is used.
@@ -106,6 +111,7 @@ Convenience method for tracking in-app purchases.
 LvlUpSDK.Revenue.TrackInAppPurchase(
     productId: "com.game.coins_100",
     revenue: 0.99,
+    currency: "USD",
     transactionId: "txn_abc123",
     store: "APPLE_APP_STORE",
     productName: "100 Coins",
@@ -248,20 +254,24 @@ void OnRewardedAdRevenuePaid(string adUnitId, MaxSdkBase.AdInfo adInfo)
 ```
 
 ### Unity IAP Integration
+With `com.unity.purchasing` installed, `TrackPurchase` extracts every field from the `Product`.
+Record the placement when the player taps buy, and clear it if the purchase fails:
 ```csharp
+public void BuyFromOutOfMoves()
+{
+    LvlUpSDK.Revenue.SetPurchasePlacement("out_of_moves", "com.game.moves_5");
+    storeController.InitiatePurchase("com.game.moves_5");
+}
+
 public PurchaseProcessingResult ProcessPurchase(PurchaseEventArgs args)
 {
-    LvlUpSDK.Revenue.TrackInAppPurchase(
-        productId: args.purchasedProduct.definition.id,
-        revenue: (double)args.purchasedProduct.metadata.localizedPrice,
-        transactionId: args.purchasedProduct.transactionID,
-        store: "APPLE_APP_STORE", // or determine dynamically
-        productName: args.purchasedProduct.metadata.localizedTitle,
-        quantity: 1,
-        isVerified: true // after receipt validation
-    );
-    
+    LvlUpSDK.Revenue.TrackPurchase(args.purchasedProduct); // consumes the pending placement
     return PurchaseProcessingResult.Complete;
+}
+
+public void OnPurchaseFailed(Product product, PurchaseFailureReason reason)
+{
+    LvlUpSDK.Revenue.ClearPurchasePlacement(product.definition.id);
 }
 ```
 
