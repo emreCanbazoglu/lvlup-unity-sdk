@@ -38,6 +38,9 @@ namespace LvlUp.Models
         public bool isVerified;
         public int quantity;
         public bool isRestored;
+        // Where in the game the purchase started ("shop", "offer_popup"). Filled from the
+        // TrackInAppPurchase placement argument or LvlUpSDK.Revenue.SetPurchasePlacement.
+        public string iapPlacement;
 
         // Player context (IAP only) — auto-injected by RevenueTrackingService from
         // LvlUpManager.GetCurrentLevel() when not explicitly set. Enables ARPU-by-level

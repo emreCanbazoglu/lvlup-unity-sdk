@@ -628,12 +628,39 @@ namespace LvlUp
             }
 
             /// <summary>
-            /// Track an in-app purchase
+            /// Track an in-app purchase. <paramref name="placement"/> is where in the game the purchase
+            /// started (trimmed, up to 64 characters); when omitted, a pending SetPurchasePlacement is used.
             /// </summary>
             public static void TrackInAppPurchase(string productId, double revenue, string currency, string transactionId, double revenueUSD = 0,
-                string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
+                string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false,
+                string placement = null)
             {
-                Manager?.TrackInAppPurchase(productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified);
+                Manager?.TrackInAppPurchase(productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified, placement);
+            }
+
+            /// <summary>
+            /// Record where in the game the next purchase starts (trimmed, up to 64 characters; blank clears it).
+            /// Call it right before opening the store sheet. The next tracked purchase of
+            /// <paramref name="productId"/> consumes it, or of any product when productId is omitted.
+            /// It is used by TrackPurchase auto-capture and by manual tracking without an explicit placement,
+            /// and expires after 10 minutes so an abandoned purchase cannot label a later one.
+            /// </summary>
+            /// <example><code>
+            /// LvlUpSDK.Revenue.SetPurchasePlacement("out_of_moves", "com.game.moves_5");
+            /// storeController.InitiatePurchase("com.game.moves_5");
+            /// </code></example>
+            public static void SetPurchasePlacement(string placement, string productId = null)
+            {
+                PurchasePlacementContext.Shared.SetPlacement(placement, productId);
+            }
+
+            /// <summary>
+            /// Clear the pending placement for a product, or every pending placement when productId is omitted.
+            /// Call it when a purchase is cancelled or fails.
+            /// </summary>
+            public static void ClearPurchasePlacement(string productId = null)
+            {
+                PurchasePlacementContext.Shared.ClearPlacement(productId);
             }
 
             /// <summary>

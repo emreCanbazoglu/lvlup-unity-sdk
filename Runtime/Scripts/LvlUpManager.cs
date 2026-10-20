@@ -149,7 +149,9 @@ namespace LvlUp
             // via RuntimeInitializeOnLoadMethod when com.unity.purchasing is installed.
             if (_config.autoTrackIAP && IAPBridge.InitializeHandler != null)
             {
-                IAPBridge.InitializeHandler(_revenueTrackingService.TrackInAppPurchase);
+                // Auto-capture has no placement argument; it resolves from SetPurchasePlacement.
+                IAPBridge.InitializeHandler((productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified) =>
+                    _revenueTrackingService.TrackInAppPurchase(productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified));
             }
 
             // Initialize other services
@@ -840,9 +842,10 @@ namespace LvlUp
         /// Track an in-app purchase (convenience method)
         /// </summary>
         public void TrackInAppPurchase(string productId, double revenue, string currency, double revenueUSD, string transactionId,
-            string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
+            string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false,
+            string placement = null)
         {
-            _revenueTrackingService.TrackInAppPurchase(productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified);
+            _revenueTrackingService.TrackInAppPurchase(productId, revenue, currency, revenueUSD, transactionId, store, productName, productType, quantity, isVerified, placement);
         }
 
         #endregion

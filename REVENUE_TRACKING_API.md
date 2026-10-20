@@ -99,6 +99,7 @@ Convenience method for tracking in-app purchases.
 - `productName` (string, optional): Human-readable product name
 - `quantity` (int, optional): Quantity purchased (default: 1)
 - `isVerified` (bool, optional): Whether purchase is verified (default: false)
+- `placement` (string, optional, 1.10.0+): Where in the game the purchase started (e.g., "shop", "offer_popup"). Trimmed, up to 64 characters. When omitted, a pending `SetPurchasePlacement` is used.
 
 **Example:**
 ```csharp
@@ -109,8 +110,32 @@ LvlUpSDK.Revenue.TrackInAppPurchase(
     store: "APPLE_APP_STORE",
     productName: "100 Coins",
     quantity: 1,
-    isVerified: true
+    isVerified: true,
+    placement: "shop"
 );
+```
+
+### LvlUpSDK.Revenue.SetPurchasePlacement() (1.10.0+)
+
+Records where the next purchase starts, for purchases tracked without an explicit placement —
+mainly `TrackPurchase(product)` auto-capture, whose store callback has no UI context.
+Call it right before opening the store sheet.
+
+**Parameters:**
+- `placement` (string): Placement name. Trimmed, up to 64 characters; blank clears it.
+- `productId` (string, optional): Only a purchase of this product consumes it. Omit to apply it to whichever product is bought next.
+
+The next matching purchase consumes it, and it expires after 10 minutes, so an abandoned purchase cannot
+label a later one. A product-specific placement wins over an any-product one; an explicit `placement`
+argument wins over both. Call `ClearPurchasePlacement(productId)` (or with no argument to clear all) when
+a purchase is cancelled or fails.
+
+```csharp
+LvlUpSDK.Revenue.SetPurchasePlacement("out_of_moves", "com.game.moves_5");
+storeController.InitiatePurchase("com.game.moves_5");
+
+// In OnPurchaseFailed:
+LvlUpSDK.Revenue.ClearPurchasePlacement("com.game.moves_5");
 ```
 
 ### LvlUpSDK.Revenue.Flush()

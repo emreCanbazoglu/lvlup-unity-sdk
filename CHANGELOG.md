@@ -5,6 +5,14 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-10-20
+
+### Added
+- In-app purchase placement (`iapPlacement`): where in the game a purchase started, for per-source IAP reporting on the dashboard.
+- `placement` argument on `LvlUpSDK.Revenue.TrackInAppPurchase`.
+- `LvlUpSDK.Revenue.SetPurchasePlacement(placement, productId = null)` and `ClearPurchasePlacement(productId = null)` for `TrackPurchase` auto-capture. The next matching purchase consumes the pending placement; it expires after 10 minutes. A product-specific placement wins over an any-product one, and an explicit argument wins over both. Names are trimmed and limited to 64 characters while preserving casing.
+- EditMode coverage for purchase placement resolution.
+
 ## [1.9.0] - 2026-10-18
 
 ### Added
