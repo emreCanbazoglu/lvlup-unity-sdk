@@ -119,6 +119,10 @@ namespace LvlUp.Services
                 }
             }
 
+            // Consume the pending placement only for purchases that are actually queued.
+            if (revenueData.revenueType == "IN_APP_PURCHASE")
+                revenueData.iapPlacement = PurchasePlacementContext.Shared.Resolve(revenueData.productId, revenueData.iapPlacement);
+
             // Populate context from current session and metadata
             PopulateRevenueContext(revenueData);
             ApplyAbTests(revenueData);
@@ -175,7 +179,8 @@ namespace LvlUp.Services
         /// Track an in-app purchase (convenience method)
         /// </summary>
         public void TrackInAppPurchase(string productId, double revenue, string currency, double revenueUSD, string transactionId,
-            string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false)
+            string store = null, string productName = null, string productType = null, int quantity = 1, bool isVerified = false,
+            string placement = null)
         {
             var revenueData = new RevenueData
             {
@@ -189,7 +194,8 @@ namespace LvlUp.Services
                 transactionId = transactionId,
                 store = store,
                 quantity = quantity,
-                isVerified = isVerified
+                isVerified = isVerified,
+                iapPlacement = placement
             };
 
             TrackRevenue(revenueData);
