@@ -5,6 +5,20 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2026-10-21
+
+### Fixed
+- **Player builds fetch production remote config.** Builds were meant to force `production`, but the environment from `LvlUpConfig.asset` reached `RemoteConfigService` before that guard ran, so a build shipped with `remoteConfigEnvironment = development` fetched development config and the backend assigned no A/B tests. The environment is now resolved once, before the service starts: always `production` in player builds, the asset value in the Editor. `LvlUpDebugSettings.EnvironmentOverride` still applies per fetch and is the supported way to use another environment on a device.
+- The "RemoteConfig service ready" and "Remote Config initialized" logs print the environment the service actually fetches, including any override.
+- The config cache is keyed by the environment actually fetched. An overridden (e.g. `development`) response is no longer saved as the `production` cache, and a build that cached `development` config before this fix never reads it, since it now loads only the `production` cache.
+- Configs loaded from the cache are no longer saved back to it. Re-saving reset the cache file's age, so an offline device could keep using a stale cache past the 5-minute TTL, and the load was reported as `from cache: false`.
+
+### Changed
+- `LvlUpManager.GetEffectiveRemoteConfigEnvironment()` (and `LvlUpSDK.RemoteConfig.EffectiveEnvironment`) includes `EnvironmentOverride` once the service is initialized.
+
+### Added
+- EditMode coverage for remote config environment resolution and cache isolation.
+
 ## [1.12.0] - 2026-10-21
 
 ### Fixed

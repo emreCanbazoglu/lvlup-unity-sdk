@@ -188,13 +188,9 @@ namespace LvlUp.Services
                 bool fetchComplete = false;
 
                 // Build endpoint with query parameters for context
-                // Check for environment override first (works in editor and builds)
-                string environmentToUse = _currentEnvironment;
-                if (LvlUpDebugSettings.HasEnvironmentOverride)
-                {
-                    environmentToUse = LvlUpDebugSettings.EnvironmentOverride;
-                }
-                
+                // Environment override (works in editor and builds) wins over the base environment
+                string environmentToUse = GetCurrentEnvironment();
+
                 string endpoint = $"config/configs?environment={environmentToUse}";
                 
                 // Use platform override if set (for editor testing), otherwise use context platform
@@ -280,9 +276,9 @@ namespace LvlUp.Services
 
             // All retries failed, try to load from cache
             Debug.Log("[LvlUp] All fetch attempts failed, trying cache...");
-            if (_cacheService.TryLoadConfigs(_currentEnvironment, out var cachedConfigsResponse))
+            if (_cacheService.TryLoadConfigs(GetCurrentEnvironment(), out var cachedConfigsResponse))
             {
-                ProcessConfigsResponse(cachedConfigsResponse);
+                ProcessConfigsResponse(cachedConfigsResponse, isFromCache: true);
                 _isFetching = false;
                 onComplete?.Invoke(true);
             }
@@ -338,7 +334,7 @@ namespace LvlUp.Services
             onComplete?.Invoke(success, layers);
         }
 
-        private void ProcessConfigsResponse(ConfigsResponse configsResponse)
+        internal void ProcessConfigsResponse(ConfigsResponse configsResponse, bool isFromCache = false)
         {
             if (configsResponse?.configs == null)
             {
@@ -350,7 +346,9 @@ namespace LvlUp.Services
             List<ConfigData> configList = new List<ConfigData>(configsResponse.configs);
 
             // Process the configs
-            ProcessConfigs(configList, configsResponse, isFromCache: false);
+            // Cached responses must not be re-saved: that would reset the cache file's age and keep
+            // stale configs alive past the TTL.
+            ProcessConfigs(configList, configsResponse, isFromCache);
         }
 
 
@@ -375,10 +373,11 @@ namespace LvlUp.Services
             // Configs are now loaded and safe to read.
             _hasLoadedConfigs = true;
 
-            // Save to cache if from server
+            // Save to cache if from server, keyed by the environment that was actually fetched so an
+            // overridden (e.g. development) response never lands in the production cache.
             if (!isFromCache && configsResponse != null && !_currentAbTestsForced)
             {
-                _cacheService.SaveConfigs(configsResponse, _currentEnvironment);
+                _cacheService.SaveConfigs(configsResponse, GetCurrentEnvironment());
             }
 
             // Fire event
@@ -402,7 +401,7 @@ namespace LvlUp.Services
         private void LogConfigResult(List<ConfigData> configs, bool isFromCache)
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"[LvlUp] Remote config result (environment: {_currentEnvironment}, from cache: {isFromCache}, forced A/B: {_currentAbTestsForced}):");
+            sb.AppendLine($"[LvlUp] Remote config result (environment: {GetCurrentEnvironment()}, from cache: {isFromCache}, forced A/B: {_currentAbTestsForced}):");
 
             sb.AppendLine($"  Configs ({configs.Count}):");
             foreach (var config in configs)
@@ -666,7 +665,7 @@ namespace LvlUp.Services
         /// </summary>
         public bool IsCached()
         {
-            return _cacheService.IsValidCache(_currentEnvironment);
+            return _cacheService.IsValidCache(GetCurrentEnvironment());
         }
 
         /// <summary>
@@ -674,7 +673,7 @@ namespace LvlUp.Services
         /// </summary>
         public long GetCacheAgeMs()
         {
-            return _cacheService.GetCacheAgeMs(_currentEnvironment);
+            return _cacheService.GetCacheAgeMs(GetCurrentEnvironment());
         }
 
         /// <summary>

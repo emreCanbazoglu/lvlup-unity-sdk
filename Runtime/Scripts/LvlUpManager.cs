@@ -114,6 +114,11 @@ namespace LvlUp
             _baseUrl = baseUrl;
             _config = config ?? new LvlUpConfig();
 
+            // Resolve once, before the service exists: player builds always fetch production, so an
+            // asset left on "development" for Editor testing can't leak into a shipped build.
+            remoteConfigEnvironment = ResolveRemoteConfigEnvironment(remoteConfigEnvironment, Application.isEditor);
+            _config.remoteConfigEnvironment = remoteConfigEnvironment;
+
             _httpClient = new LvlUpHttpClient(_baseUrl, _apiKey, _config.timeout, _config.enableDebugLogs);
             
             CreateServices();
@@ -121,7 +126,7 @@ namespace LvlUp
             InitializeServices(remoteConfigEnvironment);
 
             if (_config.enableDebugLogs)
-                Debug.Log($"[LvlUp] Remote Config initialized with environment: {remoteConfigEnvironment}");
+                Debug.Log($"[LvlUp] Remote Config initialized with environment: {_remoteConfigService.GetCurrentEnvironment()}");
             
             // Enable crash reporting by default
             if (_config.enableCrashReporting)
@@ -414,15 +419,29 @@ namespace LvlUp
         }
 
         /// <summary>
-        /// Get the actual environment that will be used (always production in builds)
+        /// Get the environment config fetches actually use: production in builds (the asset value
+        /// in the Editor), unless LvlUpDebugSettings.EnvironmentOverride is set.
         /// </summary>
         public static string GetEffectiveRemoteConfigEnvironment()
         {
-            #if UNITY_EDITOR
-            return _instance?._config?.remoteConfigEnvironment ?? "production";
-            #else
-            return "production"; // Always production in builds
-            #endif
+            var service = _instance?._remoteConfigService;
+            if (service != null && service.IsInitialized)
+                return service.GetCurrentEnvironment();
+
+            if (LvlUpDebugSettings.HasEnvironmentOverride)
+                return LvlUpDebugSettings.EnvironmentOverride;
+            return ResolveRemoteConfigEnvironment(_instance?._config?.remoteConfigEnvironment, Application.isEditor);
+        }
+
+        /// <summary>
+        /// Base remote config environment before any debug override: always "production" in player
+        /// builds, the configured value (default "production") in the Editor.
+        /// </summary>
+        internal static string ResolveRemoteConfigEnvironment(string configuredEnvironment, bool isEditor)
+        {
+            if (!isEditor || string.IsNullOrWhiteSpace(configuredEnvironment))
+                return "production";
+            return configuredEnvironment.Trim();
         }
 
 
@@ -434,11 +453,6 @@ namespace LvlUp
         {
             if (!_isInitialized)
                 yield break;
-
-            // Force production environment in builds
-            #if !UNITY_EDITOR
-            _config.remoteConfigEnvironment = "production";
-            #endif
 
             // Forward the host-provided advertising ID (if any) so the backend can gate the
             // in-app debugger server-side via the X-Device-Ad-Id header.
@@ -486,7 +500,7 @@ namespace LvlUp
             }
 
             if (_config.enableDebugLogs)
-                Debug.Log($"[LvlUp] RemoteConfig service ready (environment: {_config.remoteConfigEnvironment}, country: {country ?? "not set"})");
+                Debug.Log($"[LvlUp] RemoteConfig service ready (environment: {_remoteConfigService.GetCurrentEnvironment()}, country: {country ?? "not set"})");
         }
 
         /// <summary>
