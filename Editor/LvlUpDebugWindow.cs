@@ -1,8 +1,11 @@
 using UnityEngine;
 using UnityEditor;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using LvlUp.RemoteConfig;
+using LvlUp.Services;
 using Newtonsoft.Json;
 
 namespace LvlUp.Editor
@@ -16,9 +19,6 @@ namespace LvlUp.Editor
         private Vector2 _scrollPosition;
         private string _selectedEnvironment = "production";
         private string _selectedPlatform = "editor";
-        private string _forceAbLayerKey = "";
-        private string _forceAbTestKey = "";
-        private string _forceAbVariantKey = "";
         private List<AbDebugLayer> _abDebugCatalog = new List<AbDebugLayer>();
         private bool _isFetchingAbCatalog;
         private bool _showApiKey;
@@ -65,9 +65,10 @@ namespace LvlUp.Editor
                 _selectedPlatform = "editor";
             }
 
-            _forceAbLayerKey = LvlUpDebugSettings.ForceAbLayerKey ?? "";
-            _forceAbTestKey = LvlUpDebugSettings.ForceAbTestKey ?? "";
-            _forceAbVariantKey = LvlUpDebugSettings.ForceAbVariantKey ?? "";
+            if (_abDebugCatalog.Count == 0 && _config != null && _config.IsValid())
+            {
+                FetchAbCatalog();
+            }
         }
 
         private void LoadConfig()
@@ -413,116 +414,65 @@ namespace LvlUp.Editor
             GUILayout.Label("A/B Test Override", EditorStyles.boldLabel);
             EditorGUILayout.Space(5);
 
-            EditorGUILayout.HelpBox("Force a local debug cohort for remote config testing. This persists on the device and does not create a production assignment.", MessageType.Info);
+            EditorGUILayout.HelpBox("Tick a variant to force it on this device. You can force one variant per layer, so different layers can be combined. Tick it again to un-force it. Works in Edit mode too: the choice is applied when you enter Play. Forced cohorts are excluded from analytics.", MessageType.Info);
 
             EditorGUILayout.Space(5);
-            LvlUpManager manager = FindObjectOfType<LvlUpManager>();
-            var remoteConfigService = manager != null && manager.IsInitialized() ? manager.GetRemoteConfigService() : null;
-
             EditorGUILayout.BeginHorizontal();
-            if (Application.isPlaying && remoteConfigService != null && GUILayout.Button(_isFetchingAbCatalog ? "Fetching A/B Tests..." : "Fetch A/B Tests"))
+            using (new EditorGUI.DisabledScope(_isFetchingAbCatalog))
             {
-                _isFetchingAbCatalog = true;
-                remoteConfigService.FetchAbDebugCatalogAsync(manager, (success, layers) =>
+                if (GUILayout.Button(_isFetchingAbCatalog ? "Fetching A/B Tests..." : "Fetch A/B Tests"))
                 {
-                    _isFetchingAbCatalog = false;
-                    if (success)
-                    {
-                        _abDebugCatalog = layers ?? new List<AbDebugLayer>();
-                        Debug.Log($"[LvlUp Debug] Loaded {_abDebugCatalog.Sum(layer => layer.tests?.Length ?? 0)} A/B tests");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("[LvlUp Debug] Failed to load A/B test catalog");
-                    }
-                    Repaint();
-                });
-            }
-            if (GUILayout.Button("Reset A/B Override"))
-            {
-                ClearAbOverrideFields();
-                Debug.Log("[LvlUp Debug] A/B override cleared");
-            }
-            EditorGUILayout.EndHorizontal();
-
-            if (!Application.isPlaying)
-            {
-                EditorGUILayout.HelpBox("Enter Play mode to fetch selectable A/B tests from the backend.", MessageType.None);
-            }
-            else if (_abDebugCatalog.Count == 0)
-            {
-                var cachedCatalog = remoteConfigService?.GetAbDebugCatalog()?.ToList();
-                if (cachedCatalog != null && cachedCatalog.Count > 0)
-                {
-                    _abDebugCatalog = cachedCatalog;
+                    FetchAbCatalog();
                 }
             }
+            using (new EditorGUI.DisabledScope(!LvlUpDebugSettings.HasForcedAbOverride))
+            {
+                if (GUILayout.Button("Reset All A/B Overrides"))
+                {
+                    LvlUpDebugSettings.ClearForcedAbOverride();
+                    Debug.Log("[LvlUp Debug] All A/B overrides cleared");
+                    RefetchConfigIfPlaying();
+                }
+            }
+            EditorGUILayout.EndHorizontal();
 
             if (_abDebugCatalog.Count > 0)
             {
                 DrawAbCatalog();
-                EditorGUILayout.Space(8);
             }
-
-            GUILayout.Label("Manual Override", EditorStyles.boldLabel);
-
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Layer Key:", _labelStyle, GUILayout.Width(120));
-            _forceAbLayerKey = EditorGUILayout.TextField(_forceAbLayerKey);
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Test Key:", _labelStyle, GUILayout.Width(120));
-            _forceAbTestKey = EditorGUILayout.TextField(_forceAbTestKey);
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Variant Key:", _labelStyle, GUILayout.Width(120));
-            _forceAbVariantKey = EditorGUILayout.TextField(_forceAbVariantKey);
-            EditorGUILayout.EndHorizontal();
+            else if (!_isFetchingAbCatalog)
+            {
+                EditorGUILayout.HelpBox("No A/B tests loaded for this environment. Click 'Fetch A/B Tests'.", MessageType.None);
+            }
 
             EditorGUILayout.Space(5);
+            var forcedOverrides = LvlUpDebugSettings.ForcedAbOverrides;
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Apply A/B Override"))
+            GUILayout.Label("Current Overrides:", _labelStyle, GUILayout.Width(120));
+            if (forcedOverrides.Count > 0)
             {
-                if (string.IsNullOrEmpty(_forceAbTestKey) || string.IsNullOrEmpty(_forceAbVariantKey))
-                {
-                    EditorUtility.DisplayDialog("A/B Override", "Test Key and Variant Key are required.", "OK");
-                }
-                else
-                {
-                    LvlUpDebugSettings.SetForcedAbOverride(_forceAbLayerKey, _forceAbTestKey, _forceAbVariantKey);
-                    Debug.Log($"[LvlUp Debug] A/B override set: {_forceAbTestKey} / {_forceAbVariantKey}");
-                }
-            }
-
-            EditorGUILayout.EndHorizontal();
-
-            if (LvlUpDebugSettings.HasForcedAbOverride)
-            {
-                EditorGUILayout.Space(5);
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.Label("Current Override:", _labelStyle, GUILayout.Width(120));
                 GUIStyle activeStyle = new GUIStyle(EditorStyles.label);
                 activeStyle.normal.textColor = Color.cyan;
                 activeStyle.fontStyle = FontStyle.Bold;
-                string current = string.IsNullOrEmpty(LvlUpDebugSettings.ForceAbLayerKey)
-                    ? $"{LvlUpDebugSettings.ForceAbTestKey} / {LvlUpDebugSettings.ForceAbVariantKey}"
-                    : $"{LvlUpDebugSettings.ForceAbLayerKey} / {LvlUpDebugSettings.ForceAbTestKey} / {LvlUpDebugSettings.ForceAbVariantKey}";
-                GUILayout.Label(current, activeStyle);
-                EditorGUILayout.EndHorizontal();
+                activeStyle.wordWrap = true;
+                GUILayout.Label(string.Join("\n", forcedOverrides.Select(o => o.ToString())), activeStyle);
             }
+            else
+            {
+                GUILayout.Label("None (normal assignment)", _valueStyle);
+            }
+            EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.EndVertical();
         }
 
         private void DrawAbCatalog()
         {
-            GUILayout.Label("Select A/B Test Cohort", EditorStyles.boldLabel);
-
             foreach (var layer in _abDebugCatalog)
             {
                 if (layer?.tests == null || layer.tests.Length == 0) continue;
+
+                var forced = LvlUpDebugSettings.GetForcedAbOverride(layer.key);
 
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 GUILayout.Label($"{layer.name} ({layer.key})", _keyStyle);
@@ -538,20 +488,22 @@ namespace LvlUp.Editor
                         string label = $"{variant.name} ({variant.key}) - {variant.weightPercent:0.##}%";
                         if (variant.isControl) label += " - Control";
 
-                        bool selected =
-                            LvlUpDebugSettings.ForceAbLayerKey == layer.key &&
-                            LvlUpDebugSettings.ForceAbTestKey == test.key &&
-                            LvlUpDebugSettings.ForceAbVariantKey == variant.key;
+                        bool selected = forced != null && forced.testKey == test.key && forced.variantKey == variant.key;
 
                         bool nextSelected = EditorGUILayout.ToggleLeft(label, selected);
-                        if (nextSelected && !selected)
+                        if (nextSelected == selected) continue;
+
+                        if (nextSelected)
                         {
-                            _forceAbLayerKey = layer.key;
-                            _forceAbTestKey = test.key;
-                            _forceAbVariantKey = variant.key;
-                            LvlUpDebugSettings.SetForcedAbOverride(_forceAbLayerKey, _forceAbTestKey, _forceAbVariantKey);
-                            Debug.Log($"[LvlUp Debug] A/B override set: {test.key} / {variant.key}");
+                            LvlUpDebugSettings.SetForcedAbOverride(layer.key, test.key, variant.key);
+                            Debug.Log($"[LvlUp Debug] A/B override set: {layer.key} / {test.key} / {variant.key}");
                         }
+                        else
+                        {
+                            LvlUpDebugSettings.ClearForcedAbOverride(layer.key);
+                            Debug.Log($"[LvlUp Debug] A/B override cleared for layer {layer.key}");
+                        }
+                        RefetchConfigIfPlaying();
                     }
                 }
 
@@ -559,12 +511,111 @@ namespace LvlUp.Editor
             }
         }
 
-        private void ClearAbOverrideFields()
+        /// <summary>
+        /// Loads the A/B catalog. Uses the running SDK in Play mode; otherwise calls the backend
+        /// directly with the API key and environment from LvlUpConfig, so cohorts can be picked
+        /// before entering Play.
+        /// </summary>
+        private void FetchAbCatalog()
         {
-            _forceAbLayerKey = "";
-            _forceAbTestKey = "";
-            _forceAbVariantKey = "";
-            LvlUpDebugSettings.ClearForcedAbOverride();
+            if (_isFetchingAbCatalog) return;
+
+            Action<bool, List<AbDebugLayer>> onComplete = (success, layers) =>
+            {
+                _isFetchingAbCatalog = false;
+                if (success)
+                {
+                    _abDebugCatalog = layers ?? new List<AbDebugLayer>();
+                    Debug.Log($"[LvlUp Debug] Loaded {_abDebugCatalog.Sum(layer => layer.tests?.Length ?? 0)} A/B tests");
+                }
+                else
+                {
+                    Debug.LogWarning("[LvlUp Debug] Failed to load A/B test catalog");
+                }
+                Repaint();
+            };
+
+            LvlUpManager manager = Application.isPlaying ? FindObjectOfType<LvlUpManager>() : null;
+            var remoteConfigService = manager != null && manager.IsInitialized() ? manager.GetRemoteConfigService() : null;
+            if (remoteConfigService != null)
+            {
+                _isFetchingAbCatalog = true;
+                remoteConfigService.FetchAbDebugCatalogAsync(manager, onComplete);
+                return;
+            }
+
+            if (_config == null || !_config.IsValid())
+            {
+                Debug.LogWarning("[LvlUp Debug] Cannot fetch A/B tests: LvlUpConfig (Resources/LvlUpConfig) is missing an API key");
+                return;
+            }
+
+            string environment = LvlUpDebugSettings.HasEnvironmentOverride
+                ? LvlUpDebugSettings.EnvironmentOverride
+                : _config.remoteConfigEnvironment;
+            string endpoint = $"config/ab-tests/debug-catalog?environment={Uri.EscapeDataString(environment)}";
+
+            _isFetchingAbCatalog = true;
+            var client = new LvlUpHttpClient(_config.GetBaseUrl(), _config.GetApiKey());
+            RunInEditor(client.Get<AbDebugCatalogResponse>(endpoint, response =>
+            {
+                if (!response.success) Debug.LogWarning($"[LvlUp Debug] A/B catalog request failed: {response.error}");
+                var layers = response.success && response.data?.layers != null
+                    ? new List<AbDebugLayer>(response.data.layers)
+                    : null;
+                onComplete(response.success, layers);
+            }));
+        }
+
+        /// <summary>
+        /// Drives a coroutine from EditorApplication.update so runtime HTTP code works outside Play mode.
+        /// </summary>
+        private static void RunInEditor(IEnumerator routine)
+        {
+            var stack = new Stack<IEnumerator>();
+            stack.Push(routine);
+
+            EditorApplication.CallbackFunction tick = null;
+            tick = () =>
+            {
+                while (stack.Count > 0)
+                {
+                    var top = stack.Peek();
+                    if (top.Current is AsyncOperation operation && !operation.isDone) return;
+                    if (!top.MoveNext())
+                    {
+                        stack.Pop();
+                        continue;
+                    }
+                    if (top.Current is IEnumerator nested)
+                    {
+                        stack.Push(nested);
+                        continue;
+                    }
+                    return;
+                }
+                EditorApplication.update -= tick;
+            };
+            EditorApplication.update += tick;
+        }
+
+        /// <summary>
+        /// In Play mode, refetch remote config so an override change is visible immediately.
+        /// Outside Play mode the override is picked up on the next launch.
+        /// </summary>
+        private void RefetchConfigIfPlaying()
+        {
+            if (!Application.isPlaying) return;
+
+            LvlUpManager manager = FindObjectOfType<LvlUpManager>();
+            var remoteConfigService = manager != null && manager.IsInitialized() ? manager.GetRemoteConfigService() : null;
+            if (remoteConfigService == null) return;
+
+            remoteConfigService.FetchAsync(manager, success =>
+            {
+                if (!success) Debug.LogWarning("[LvlUp Debug] Failed to refresh remote config after A/B override change");
+                Repaint();
+            });
         }
 
         private void DrawRemoteConfigSection()

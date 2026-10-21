@@ -5,6 +5,18 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-10-21
+
+### Added
+- **Force one A/B variant per layer.** The debug A/B override now holds one forced variant per layer, so cohorts in different layers (e.g. `early_ads` and `town_visuals`) can be forced together. `LvlUpDebugSettings.ForcedAbOverrides`, `GetForcedAbOverride(layerKey)` and `ClearForcedAbOverride(layerKey)` were added; `SetForcedAbOverride` now replaces only the variant in that layer. Two or more overrides are sent as the new `forceAbs` query param and need a backend that supports it; a single override still uses the original `forceAbLayerKey`/`forceAbTestKey`/`forceAbVariantKey` params. A saved pre-1.11 override is migrated automatically.
+- The Debug Window fetches the A/B test list outside Play mode (using the API key and environment from `LvlUpConfig`), so you can pick cohorts before pressing Play. The list loads when the window opens.
+
+### Changed
+- Debug Window A/B section: ticking a forced variant again un-forces it, and in Play mode any change refetches remote config immediately. The Manual Override fields (Layer/Test/Variant key) were removed.
+- SRDebugger panel: the A/B key text fields were replaced by a "Fetch A/B Tests" button and one button per variant (category "LvlUp A/B").
+
+### Removed
+- `LvlUpDebugSettings.ForceAbLayerKey`, `ForceAbTestKey` and `ForceAbVariantKey`. Use `ForcedAbOverrides` / `GetForcedAbOverride(layerKey)`.
 ## [1.10.0] - 2026-10-20
 
 ### Added

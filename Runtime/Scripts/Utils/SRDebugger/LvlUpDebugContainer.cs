@@ -97,39 +97,26 @@ namespace LvlUp.Utils
                 "LvlUp"
             ));
 
-            // AB Test Override Section
+            // AB Test Override Section: one forced variant per layer, picked from the backend catalog
             _dynamicContainer.AddOption(OptionDefinition.Create(
-                "A/B Override",
+                "A/B Overrides",
                 () => GetAbOverrideDisplay(),
                 null,
-                "LvlUp"
-            ));
-
-            _dynamicContainer.AddOption(OptionDefinition.Create(
-                "A/B Layer Key",
-                () => global::LvlUp.LvlUpDebugSettings.ForceAbLayerKey ?? "",
-                value => global::LvlUp.LvlUpDebugSettings.ForceAbLayerKey = value,
-                "LvlUp"
-            ));
-
-            _dynamicContainer.AddOption(OptionDefinition.Create(
-                "A/B Test Key",
-                () => global::LvlUp.LvlUpDebugSettings.ForceAbTestKey ?? "",
-                value => global::LvlUp.LvlUpDebugSettings.ForceAbTestKey = value,
-                "LvlUp"
-            ));
-
-            _dynamicContainer.AddOption(OptionDefinition.Create(
-                "A/B Variant Key",
-                () => global::LvlUp.LvlUpDebugSettings.ForceAbVariantKey ?? "",
-                value => global::LvlUp.LvlUpDebugSettings.ForceAbVariantKey = value,
-                "LvlUp"
+                "LvlUp A/B"
             ));
 
             _dynamicContainer.AddOption(OptionDefinition.FromMethod(
-                "Clear A/B Override",
+                "Fetch A/B Tests",
+                FetchAbCatalog,
+                "LvlUp A/B"
+            ));
+
+            AddAbVariantOptions();
+
+            _dynamicContainer.AddOption(OptionDefinition.FromMethod(
+                "Clear A/B Overrides",
                 ClearAbOverride,
-                "LvlUp"
+                "LvlUp A/B"
             ));
 
             // SDK Status Section
@@ -226,22 +213,101 @@ namespace LvlUp.Utils
 
         private string GetAbOverrideDisplay()
         {
-            if (!global::LvlUp.LvlUpDebugSettings.HasForcedAbOverride)
+            var overrides = global::LvlUp.LvlUpDebugSettings.ForcedAbOverrides;
+            if (overrides.Count == 0)
             {
                 return "none";
             }
 
-            var layer = global::LvlUp.LvlUpDebugSettings.ForceAbLayerKey;
-            var test = global::LvlUp.LvlUpDebugSettings.ForceAbTestKey;
-            var variant = global::LvlUp.LvlUpDebugSettings.ForceAbVariantKey;
-            return string.IsNullOrEmpty(layer) ? $"{test} / {variant}" : $"{layer} / {test} / {variant}";
+            var parts = new List<string>();
+            foreach (var forced in overrides)
+            {
+                parts.Add(forced.ToString());
+            }
+            return string.Join(", ", parts);
+        }
+
+        /// <summary>
+        /// One button per variant in the fetched catalog. Tapping a variant forces it for its
+        /// layer (replacing any other variant in that layer); tapping a forced variant clears it.
+        /// </summary>
+        private void AddAbVariantOptions()
+        {
+            var remoteConfigService = GetRemoteConfigService(out _);
+            var catalog = remoteConfigService?.GetAbDebugCatalog();
+            if (catalog == null) return;
+
+            foreach (var layer in catalog)
+            {
+                if (layer?.tests == null) continue;
+                var forced = global::LvlUp.LvlUpDebugSettings.GetForcedAbOverride(layer.key);
+
+                foreach (var test in layer.tests)
+                {
+                    if (test?.variants == null) continue;
+                    foreach (var variant in test.variants)
+                    {
+                        bool selected = forced != null && forced.testKey == test.key && forced.variantKey == variant.key;
+                        string layerKey = layer.key;
+                        string testKey = test.key;
+                        string variantKey = variant.key;
+
+                        _dynamicContainer.AddOption(OptionDefinition.FromMethod(
+                            $"{(selected ? "[x]" : "[ ]")} {layer.key}: {test.key} / {variant.key}",
+                            () => ToggleAbVariant(layerKey, testKey, variantKey, selected),
+                            "LvlUp A/B"
+                        ));
+                    }
+                }
+            }
+        }
+
+        private void ToggleAbVariant(string layerKey, string testKey, string variantKey, bool selected)
+        {
+            if (selected)
+            {
+                global::LvlUp.LvlUpDebugSettings.ClearForcedAbOverride(layerKey);
+                Debug.Log($"[LvlUp] A/B override cleared for layer {layerKey}");
+            }
+            else
+            {
+                global::LvlUp.LvlUpDebugSettings.SetForcedAbOverride(layerKey, testKey, variantKey);
+                Debug.Log($"[LvlUp] A/B override set: {layerKey} / {testKey} / {variantKey}");
+            }
+            RefetchConfig();
+            RebuildOptions();
+        }
+
+        private void FetchAbCatalog()
+        {
+            var remoteConfigService = GetRemoteConfigService(out var manager);
+            if (remoteConfigService == null)
+            {
+                Debug.LogWarning("[LvlUp] Cannot fetch A/B tests: SDK is not initialized");
+                return;
+            }
+
+            remoteConfigService.FetchAbDebugCatalogAsync(manager, (success, layers) => RebuildOptions());
         }
 
         private void ClearAbOverride()
         {
             global::LvlUp.LvlUpDebugSettings.ClearForcedAbOverride();
-            Debug.Log("[LvlUp] A/B override cleared");
+            Debug.Log("[LvlUp] A/B overrides cleared");
+            RefetchConfig();
             RebuildOptions();
+        }
+
+        private void RefetchConfig()
+        {
+            var remoteConfigService = GetRemoteConfigService(out var manager);
+            remoteConfigService?.FetchAsync(manager);
+        }
+
+        private static global::LvlUp.Services.RemoteConfigService GetRemoteConfigService(out LvlUpManager manager)
+        {
+            manager = Object.FindObjectOfType<LvlUpManager>();
+            return manager != null && manager.IsInitialized() ? manager.GetRemoteConfigService() : null;
         }
 
         // Delegate to DynamicOptionContainer

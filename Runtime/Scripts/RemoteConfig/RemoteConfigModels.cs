@@ -89,6 +89,7 @@ namespace LvlUp.RemoteConfig
     public class ConfigDebugData
     {
         public ForcedAbOverrideData forcedAbOverride;
+        public ForcedAbOverrideData[] forcedAbOverrides;
     }
 
     [Serializable]
