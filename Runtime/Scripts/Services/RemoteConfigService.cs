@@ -87,6 +87,7 @@ namespace LvlUp.Services
         private string _contextVersion;
         private string _contextCountry;
         private string _contextSegment;
+        private string _contextUserId;
 
         #endregion
 
@@ -108,6 +109,20 @@ namespace LvlUp.Services
             _contextVersion = version;
             _contextCountry = country;
             _contextSegment = segment;
+        }
+
+        /// <summary>
+        /// The player's ID sent with config fetches (the same ID used for sessions and events).
+        /// </summary>
+        public string ContextUserId => _contextUserId;
+
+        /// <summary>
+        /// Set the player's ID. It is sent as the userId query param on config fetches; the backend
+        /// assigns A/B test variants only when it is present. Safe to pass null/empty to clear it.
+        /// </summary>
+        public void SetUserId(string userId)
+        {
+            _contextUserId = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
         }
 
         /// <summary>
@@ -195,6 +210,7 @@ namespace LvlUp.Services
                 endpoint = AppendQueryParameter(endpoint, "version", _contextVersion);
                 endpoint = AppendQueryParameter(endpoint, "country", _contextCountry);
                 endpoint = AppendQueryParameter(endpoint, "segment", _contextSegment);
+                endpoint = AppendQueryParameter(endpoint, "userId", _contextUserId);
 
                 var forcedAbOverrides = LvlUpDebugSettings.ForcedAbOverrides;
                 if (forcedAbOverrides.Count > 0)

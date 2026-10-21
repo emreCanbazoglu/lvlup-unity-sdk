@@ -456,6 +456,13 @@ namespace LvlUp
                 country: country
             );
 
+            // A/B variants are assigned only when the fetch carries the player's ID. Config is
+            // fetched before the auto session starts, so use the persisted auto user ID then.
+            string configUserId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(configUserId) && _config.autoTrackSessions)
+                configUserId = GetOrCreateAutoUserId();
+            _remoteConfigService.SetUserId(configUserId);
+
             // Fetch remote configs from backend
             bool fetchComplete = false;
             _remoteConfigService.FetchAsync(this, success =>
@@ -635,7 +642,24 @@ namespace LvlUp
                 return;
             }
 
+            SyncRemoteConfigUserId(userId);
             _sessionManagementService.StartSession(userId, metadata, callback);
+        }
+
+        /// <summary>
+        /// Keep the config fetch's user ID in step with the session user. If configs were already
+        /// loaded for no user or another user, refetch so A/B assignment uses this player.
+        /// </summary>
+        private void SyncRemoteConfigUserId(string userId)
+        {
+            if (_remoteConfigService == null || string.IsNullOrWhiteSpace(userId))
+                return;
+            if (_remoteConfigService.ContextUserId == userId.Trim())
+                return;
+
+            _remoteConfigService.SetUserId(userId);
+            if (_remoteConfigService.HasLoadedConfigs)
+                _remoteConfigService.FetchAsync(this, null);
         }
 
         /// <summary>

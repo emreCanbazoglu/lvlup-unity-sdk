@@ -5,6 +5,14 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-10-21
+
+### Fixed
+- **A/B tests now assign players.** The remote config fetch sends the player's ID as the `userId` query param. The backend assigns A/B variants only when it receives a user ID, so with earlier SDK versions no player was ever assigned and everyone got the default config. Games using auto sessions send the persisted auto user ID on the first fetch, which runs before the session starts. Games that call `StartSession(userId)` themselves get a refetch with that ID if configs were already loaded without it.
+
+### Added
+- `RemoteConfigService.SetUserId(userId)` and `ContextUserId`.
+
 ## [1.11.0] - 2026-10-21
 
 ### Added
