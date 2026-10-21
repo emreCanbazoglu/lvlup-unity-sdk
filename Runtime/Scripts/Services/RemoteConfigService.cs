@@ -278,7 +278,7 @@ namespace LvlUp.Services
             Debug.Log("[LvlUp] All fetch attempts failed, trying cache...");
             if (_cacheService.TryLoadConfigs(GetCurrentEnvironment(), out var cachedConfigsResponse))
             {
-                ProcessConfigsResponse(cachedConfigsResponse);
+                ProcessConfigsResponse(cachedConfigsResponse, isFromCache: true);
                 _isFetching = false;
                 onComplete?.Invoke(true);
             }
@@ -334,7 +334,7 @@ namespace LvlUp.Services
             onComplete?.Invoke(success, layers);
         }
 
-        private void ProcessConfigsResponse(ConfigsResponse configsResponse)
+        internal void ProcessConfigsResponse(ConfigsResponse configsResponse, bool isFromCache = false)
         {
             if (configsResponse?.configs == null)
             {
@@ -346,7 +346,9 @@ namespace LvlUp.Services
             List<ConfigData> configList = new List<ConfigData>(configsResponse.configs);
 
             // Process the configs
-            ProcessConfigs(configList, configsResponse, isFromCache: false);
+            // Cached responses must not be re-saved: that would reset the cache file's age and keep
+            // stale configs alive past the TTL.
+            ProcessConfigs(configList, configsResponse, isFromCache);
         }
 
 

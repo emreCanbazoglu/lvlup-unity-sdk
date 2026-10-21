@@ -89,5 +89,35 @@ namespace LvlUp.Tests
                 cache.ClearCache();
             }
         }
+
+        [Test]
+        public void ConfigsLoadedFromCacheAreNotSavedAgain()
+        {
+            // Unique environment so the service's real cache directory is left untouched.
+            string environment = "envtest_" + Guid.NewGuid().ToString("N");
+            var service = new RemoteConfigService();
+            service.Initialize(null, environment);
+            bool? lastFromCache = null;
+            service.OnConfigsUpdated += e => lastFromCache = e.isFromCache;
+            var response = new ConfigsResponse
+            {
+                configs = new[] { new ConfigData { key = "k", value = "v", dataType = "string" } }
+            };
+
+            try
+            {
+                service.ProcessConfigsResponse(response, isFromCache: true);
+                Assert.AreEqual(true, lastFromCache);
+                Assert.IsFalse(service.IsCached());
+
+                service.ProcessConfigsResponse(response);
+                Assert.AreEqual(false, lastFromCache);
+                Assert.IsTrue(service.IsCached());
+            }
+            finally
+            {
+                new RemoteConfigCacheService("default").ClearCache(environment);
+            }
+        }
     }
 }
