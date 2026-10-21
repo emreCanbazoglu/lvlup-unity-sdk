@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using UnityEngine;
 using LvlUp.RemoteConfig;
 using LvlUp;
@@ -195,13 +196,22 @@ namespace LvlUp.Services
                 endpoint = AppendQueryParameter(endpoint, "country", _contextCountry);
                 endpoint = AppendQueryParameter(endpoint, "segment", _contextSegment);
 
-                bool hasForcedAbOverride = LvlUpDebugSettings.HasForcedAbOverride;
-                if (hasForcedAbOverride)
+                var forcedAbOverrides = LvlUpDebugSettings.ForcedAbOverrides;
+                if (forcedAbOverrides.Count > 0)
                 {
                     endpoint = AppendQueryParameter(endpoint, "debug", "true");
-                    endpoint = AppendQueryParameter(endpoint, "forceAbLayerKey", LvlUpDebugSettings.ForceAbLayerKey);
-                    endpoint = AppendQueryParameter(endpoint, "forceAbTestKey", LvlUpDebugSettings.ForceAbTestKey);
-                    endpoint = AppendQueryParameter(endpoint, "forceAbVariantKey", LvlUpDebugSettings.ForceAbVariantKey);
+                    if (forcedAbOverrides.Count == 1)
+                    {
+                        // Single override uses the original params so older backends still honor it.
+                        var forced = forcedAbOverrides[0];
+                        endpoint = AppendQueryParameter(endpoint, "forceAbLayerKey", forced.layerKey);
+                        endpoint = AppendQueryParameter(endpoint, "forceAbTestKey", forced.testKey);
+                        endpoint = AppendQueryParameter(endpoint, "forceAbVariantKey", forced.variantKey);
+                    }
+                    else
+                    {
+                        endpoint = AppendQueryParameter(endpoint, "forceAbs", JsonConvert.SerializeObject(forcedAbOverrides));
+                    }
                 }
 
                 // Send this device's advertising ID as a header (never in the URL) so the backend
