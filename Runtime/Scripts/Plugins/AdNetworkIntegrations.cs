@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using UnityEngine;
 using LvlUp.Services;
 
@@ -150,7 +151,7 @@ namespace LvlUp.AdIntegration
                 if (value is double d) return d;
                 if (value is float f) return f;
                 if (value is int i) return i;
-                if (double.TryParse(value?.ToString() ?? "0", out double result)) return result;
+                if (double.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture, out double result)) return result;
                 
                 return 0;
             }

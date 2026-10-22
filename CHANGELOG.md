@@ -5,6 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.2] - 2026-10-22
+
+### Fixed
+- **Float remote config values are correct on every device locale.** `RemoteConfig.GetFloat` (and `LvlUpSDK.Config.TryGetFloat`) parsed with the device culture, so on locales that use `.` as the thousands separator (tr-TR, de-DE, es-ES, it-IT, id-ID, ...) `"0.05"` came back as `5`, with no error or log. Values are now parsed with `CultureInfo.InvariantCulture`.
+- `GetInt`, the `0`/`1` fallback in `GetBool`, MAX ad revenue values passed as strings, and `SimpleJson` integer parsing and primitive formatting are culture-invariant too.
+
+### Added
+- EditMode coverage that runs `GetFloat`/`GetInt`/`GetBool` under tr-TR, de-DE and en-US.
+
 ## [1.12.1] - 2026-10-21
 
 ### Fixed
