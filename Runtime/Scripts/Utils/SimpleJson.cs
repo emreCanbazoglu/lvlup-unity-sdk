@@ -37,7 +37,7 @@ namespace LvlUp.Utils
                 if (obj is decimal decimalVal)
                     return decimalVal.ToString(CultureInfo.InvariantCulture);
                 
-                return obj.ToString();
+                return Convert.ToString(obj, CultureInfo.InvariantCulture);
             }
 
             // Handle Dictionary
@@ -222,13 +222,13 @@ namespace LvlUp.Utils
 
             if (targetType == typeof(int))
             {
-                if (int.TryParse(jsonValue, out int intVal))
+                if (int.TryParse(jsonValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out int intVal))
                     return intVal;
             }
 
             if (targetType == typeof(long))
             {
-                if (long.TryParse(jsonValue, out long longVal))
+                if (long.TryParse(jsonValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out long longVal))
                     return longVal;
             }
 
@@ -534,7 +534,7 @@ namespace LvlUp.Utils
                     {
                         dict[key] = value == "true";
                     }
-                    else if (int.TryParse(value, out int intVal))
+                    else if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int intVal))
                     {
                         dict[key] = intVal;
                     }
@@ -586,7 +586,7 @@ namespace LvlUp.Utils
                 {
                     list.Add(value == "true");
                 }
-                else if (int.TryParse(value, out int intVal))
+                else if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int intVal))
                 {
                     list.Add(intVal);
                 }

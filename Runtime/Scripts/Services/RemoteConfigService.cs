@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using Newtonsoft.Json;
 using UnityEngine;
 using LvlUp.RemoteConfig;
@@ -450,7 +451,7 @@ namespace LvlUp.Services
             try
             {
                 string valueStr = config.GetValueAsString();
-                if (int.TryParse(valueStr, out int result))
+                if (int.TryParse(valueStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result))
                     return result;
             }
             catch (Exception e)
@@ -506,7 +507,7 @@ namespace LvlUp.Services
                     return result;
 
                 // Also check for 0/1 convention
-                if (int.TryParse(valueStr, out int intValue))
+                if (int.TryParse(valueStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int intValue))
                     return intValue != 0;
             }
             catch (Exception e)
@@ -537,7 +538,9 @@ namespace LvlUp.Services
             try
             {
                 string valueStr = config.GetValueAsString();
-                if (float.TryParse(valueStr, out float result))
+                // Config values are serialized culture-invariantly ("0.05"); parsing with the device culture
+                // would read "." as a thousands separator on tr-TR/de-DE and turn 0.05 into 5.
+                if (float.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out float result))
                     return result;
             }
             catch (Exception e)
