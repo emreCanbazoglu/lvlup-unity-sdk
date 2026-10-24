@@ -535,24 +535,26 @@ namespace LvlUp
         }
 
         /// <summary>
-        /// Get current platform as string
+        /// Get current platform as string. Lowercase, matching EventMetadata: the backend
+        /// compares platform strings case-sensitively, so "Android" and "android" used to
+        /// land as two different platforms.
         /// </summary>
         private string GetPlatform()
         {
             #if UNITY_IOS
-                return "iOS";
+                return "ios";
             #elif UNITY_ANDROID
-                return "Android";
+                return "android";
             #elif UNITY_WEBGL
-                return "WebGL";
+                return "webgl";
             #elif UNITY_STANDALONE_WIN
-                return "Windows";
+                return "windows";
             #elif UNITY_STANDALONE_OSX
-                return "macOS";
+                return "macos";
             #elif UNITY_STANDALONE_LINUX
-                return "Linux";
+                return "linux";
             #else
-                return "Unknown";
+                return "unknown";
             #endif
         }
 
