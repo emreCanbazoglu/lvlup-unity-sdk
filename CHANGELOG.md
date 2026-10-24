@@ -5,6 +5,11 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.3] - 2026-10-24
+
+### Fixed
+- **One platform spelling everywhere.** `GetPlatform()` (used for the remote-config context and revenue tracking) returned `Android`/`iOS`, while event metadata sent `android`/`ios`. The backend stored both, so a platform filter matched only part of a game's users (Hidden Valley: 288 vs 147 of 437). The context now sends the same lowercase values as event metadata. The backend now also lowercases on ingest, so games on older SDK versions are covered server-side.
+
 ## [1.12.2] - 2026-10-22
 
 ### Fixed
