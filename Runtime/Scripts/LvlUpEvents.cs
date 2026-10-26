@@ -91,6 +91,43 @@ namespace LvlUp
         }
 
         /// <summary>
+        /// Track a level complete event with a normalized win margin: how much of the
+        /// level's starting resource the player still had when they won.
+        ///
+        /// `winMargin` = remaining / starting resource, in [0, 1] — e.g. balls left ÷
+        /// balls at start, moves left ÷ move limit, time left ÷ time limit.
+        /// 0.0 = won with nothing to spare, 1.0 = won without using any. The dashboard
+        /// shows its average ("Avg Win Margin") and the share of wins with a margin of
+        /// 0.1 or less ("Near-miss Wins %"), the win-side counterpart of
+        /// `objectiveProgress` on `TrackLevelFailed`.
+        ///
+        /// Values outside [0, 1] (or NaN) are dropped with a warning instead of being
+        /// sent, so a mistaken argument cannot skew the metric. A `winMargin` passed here
+        /// takes precedence over one in `additionalProperties`.
+        /// </summary>
+        /// <param name="levelId">Level identifier</param>
+        /// <param name="score">Score achieved</param>
+        /// <param name="timeSeconds">Time taken in seconds</param>
+        /// <param name="winMargin">Remaining / starting resource in [0, 1] (e.g., 0.25 = a quarter of the balls left)</param>
+        /// <param name="additionalProperties">Optional additional properties</param>
+        public static void TrackLevelComplete(int levelId, int score, float timeSeconds, float winMargin, Dictionary<string, object> additionalProperties = null)
+        {
+            var props = additionalProperties != null
+                ? new Dictionary<string, object>(additionalProperties)
+                : new Dictionary<string, object>();
+            if (winMargin >= 0f && winMargin <= 1f)
+            {
+                props["winMargin"] = winMargin;
+            }
+            else
+            {
+                UnityEngine.Debug.LogWarning($"[LvlUp] TrackLevelComplete: winMargin must be in [0, 1] (remaining / starting resource); got {winMargin}. Sending the event without it.");
+            }
+
+            TrackLevelComplete(levelId, score, timeSeconds, props);
+        }
+
+        /// <summary>
         /// Track a level failed event with standard properties
         /// </summary>
         /// <param name="levelId">Level identifier</param>

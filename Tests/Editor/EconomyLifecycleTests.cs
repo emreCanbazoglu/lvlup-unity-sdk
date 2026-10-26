@@ -70,6 +70,7 @@ namespace LvlUp.Tests
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
+        [TestCase(4)]
         public void EveryLevelResultOverloadClearsInLevel(int overload)
         {
             LvlUpEvents.TrackLevelStart(42);
@@ -79,11 +80,38 @@ namespace LvlUp.Tests
                 case 1: LvlUpEvents.TrackLevelFailed(42, "fail", 5f); break;
                 case 2: LvlUpEvents.TrackLevelFailed(42, "fail", 5f, 2); break;
                 case 3: LvlUpEvents.TrackLevelFailed(42, "fail", 5f, 2, 0.5f); break;
+                case 4: LvlUpEvents.TrackLevelComplete(42, 100, 5f, 0.25f); break;
             }
             LvlUpSDK.Economy.Source("coin", 1, "reward");
             Assert.IsFalse(_config.inLevel);
             Assert.AreEqual(false, _events[_events.Count - 1].properties["inLevel"]);
             Assert.AreEqual(42, _events[_events.Count - 1].properties["levelOrder"]);
+        }
+
+        [TestCase(0f)]
+        [TestCase(0.1f)]
+        [TestCase(1f)]
+        public void WinMarginOverloadSendsMarginAndKeepsExtras(float margin)
+        {
+            var extras = new Dictionary<string, object> { { "ballsLeft", 3 }, { "winMargin", 0.9f } };
+            LvlUpEvents.TrackLevelComplete(42, 100, 5f, margin, extras);
+            var complete = _events.Find(e => e.eventName == "level_complete");
+            Assert.AreEqual(margin, complete.properties["winMargin"]);
+            Assert.AreEqual(3, complete.properties["ballsLeft"]);
+            Assert.AreEqual(42, complete.properties["levelId"]);
+            Assert.AreEqual(0.9f, extras["winMargin"], "caller's dictionary is not modified");
+        }
+
+        [TestCase(-0.1f)]
+        [TestCase(3f)]
+        [TestCase(float.NaN)]
+        public void WinMarginOverloadDropsOutOfRangeMargin(float margin)
+        {
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("winMargin must be in \\[0, 1\\]"));
+            LvlUpEvents.TrackLevelComplete(42, 100, 5f, margin);
+            var complete = _events.Find(e => e.eventName == "level_complete");
+            Assert.IsNotNull(complete);
+            Assert.IsFalse(complete.properties.ContainsKey("winMargin"));
         }
     }
 }

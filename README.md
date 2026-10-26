@@ -128,7 +128,7 @@ LvlUpManager.Instance.TrackEvent("level_complete", new Dictionary<string, object
 });
 
 // Or use LvlUpEvents helper for standard events - much cleaner!
-LvlUpEvents.TrackLevelComplete(5, 12500, 75f, 3);
+LvlUpEvents.TrackLevelComplete(5, 12500, 75f, new Dictionary<string, object> { { "stars", 3 } });
 
 // Track multiple events in a batch
 var events = new List<LvlUpEvent>
@@ -150,12 +150,33 @@ LvlUpEvents.TrackLevelStart(levelId, "Level Name", additionalProperties);
 
 // Level complete
 LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds);
-LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, stars, additionalProperties);
+LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, additionalProperties);
+LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, winMargin, additionalProperties);
 
 // Level failed
 LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds);
 LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds, attempts, additionalProperties);
+LvlUpEvents.TrackLevelFailed(levelId, reason, timeSeconds, attempts, objectiveProgress, additionalProperties);
 ```
+
+#### How close was it? (`winMargin` and `objectiveProgress`)
+
+Send these two values so the level funnel can show how close wins and fails were. Both are in [0, 1]:
+
+| Value | Event | Meaning | Dashboard columns |
+|---|---|---|---|
+| `winMargin` | `TrackLevelComplete` | Remaining ÷ starting resource at the win (balls, moves, time, lives...). 0 = won with nothing left. | Avg Win Margin, Near-miss Wins % (margin ≤ 0.1) |
+| `objectiveProgress` | `TrackLevelFailed` | Share of the level objective done at the fail. | Avg Fail Progress, Near-miss Fails % (progress ≥ 0.9) |
+
+```csharp
+// Won with 2 of 8 balls left
+LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, winMargin: 2f / 8f);
+
+// Failed with 9 of 10 targets cleared
+LvlUpEvents.TrackLevelFailed(levelId, "out_of_balls", timeSeconds, attempts, objectiveProgress: 0.9f);
+```
+
+Pick the resource that best shows how hard the level was and keep it the same for every level of a game. Values outside [0, 1] are dropped with a warning.
 
 **Benefits:** Clean static API, consistent event structure, auto-timestamps, better analytics.
 
