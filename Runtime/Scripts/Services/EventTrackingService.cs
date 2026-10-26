@@ -93,6 +93,8 @@ namespace LvlUp.Services
             // Apply cached geo data if available
             _applyGeoData?.Invoke(lvlUpEvent);
 
+            LvlUpEventMonitor.Report(LvlUpTrackedKind.Event, lvlUpEvent.eventName, lvlUpEvent);
+
             if (_config.sendImmediately)
             {
                 SendEventImmediately(lvlUpEvent, callback);
