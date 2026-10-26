@@ -106,6 +106,8 @@ namespace LvlUp.Services
                 );
             }
 
+            LvlUpEventMonitor.Report(LvlUpTrackedKind.Session, "session_start", request);
+
             _coroutineRunner.StartCoroutine(_httpClient.Post<SessionData>("analytics/sessions", request, response =>
             {
                 if (response.success)
@@ -166,6 +168,8 @@ namespace LvlUp.Services
                     geoData.countryCode
                 );
             }
+
+            LvlUpEventMonitor.Report(LvlUpTrackedKind.Session, "session_end", request);
 
             // If we have an offline session, just store the end request
             if (_hasOfflineSession && _currentSession == null)

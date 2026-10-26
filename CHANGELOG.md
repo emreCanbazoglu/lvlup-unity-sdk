@@ -5,6 +5,11 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-10-26
+
+### Added
+- **`LvlUpEventMonitor.OnTracked`**, a debug hook for in-app event viewers. It fires with a `LvlUpTrackedEvent` (kind, name, JSON payload, UTC time) whenever the SDK accepts an event, a revenue item or a session start/end, at track time rather than at batch flush. SDK-tracked events (`app_paused`/`app_resumed`/`app_quit`, economy flushes, ad impressions) are included. Payloads are serialized only while something is subscribed, so there is no cost otherwise. Heartbeats, journey checkpoints, attribution and the session end queued on quit are not reported.
+
 ## [1.13.0] - 2026-10-26
 
 ### Added

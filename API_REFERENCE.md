@@ -825,6 +825,17 @@ LvlUpManager.Instance.TrackEvent("custom_event_name", new Dictionary<string, obj
 
 ---
 
+### Debug Event Monitor
+
+`LvlUpEventMonitor.OnTracked` fires whenever the SDK accepts an event, a revenue item or a session start/end, at track time (before batching). Use it for in-app event viewers; it costs nothing while unsubscribed.
+
+```csharp
+LvlUpEventMonitor.OnTracked += tracked =>
+    Debug.Log($"{tracked.Kind} {tracked.Name} {tracked.PayloadJson}");
+```
+
+`LvlUpTrackedEvent` has `Kind` (`Event`, `Revenue`, `Session`), `Name` (event name, revenue type, or `session_start`/`session_end`), `PayloadJson` and `TrackedAtUtc`.
+
 ## Error Handling
 
 All callbacks include an `ApiResponse` that indicates success/failure:

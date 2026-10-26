@@ -127,6 +127,8 @@ namespace LvlUp.Services
             PopulateRevenueContext(revenueData);
             ApplyAbTests(revenueData);
 
+            LvlUpEventMonitor.Report(LvlUpTrackedKind.Revenue, revenueData.revenueType, revenueData);
+
             // Add to batch
             _revenueBatch.Add(revenueData);
             EnforceRevenueQueueCap();
