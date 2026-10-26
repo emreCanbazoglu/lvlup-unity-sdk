@@ -5,6 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-10-26
+
+### Added
+- **`TrackLevelComplete(levelId, score, timeSeconds, winMargin, additionalProperties)`** sends `winMargin`: how much of the level's starting resource was left at the win (remaining ÷ starting, in [0, 1], e.g. balls left ÷ balls at start). It is the win-side counterpart of `objectiveProgress` on `TrackLevelFailed`. The level funnel shows it as **Avg Win Margin** and **Near-miss Wins %** (wins with a margin of 0.1 or less), next to Avg Fail Progress and the new **Near-miss Fails %** (fails with `objectiveProgress` of 0.9 or more).
+- Values outside [0, 1] or NaN are dropped with a warning instead of being sent.
+
+### Fixed
+- README and API reference no longer document a `TrackLevelComplete(levelId, score, timeSeconds, stars)` overload, which never existed. With the new `float winMargin` overload, copying that example would have sent the star count as the win margin. Pass stars in `additionalProperties`. The API reference now also lists the `objectiveProgress` overload of `TrackLevelFailed`.
+
 ## [1.12.3] - 2026-10-24
 
 ### Fixed

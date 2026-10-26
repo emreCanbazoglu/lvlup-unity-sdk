@@ -126,6 +126,15 @@ public class BasicLvlUpIntegration : MonoBehaviour
     }
 
     /// <summary>
+    /// Example: Track level completion with win margin (SDK 1.13.0+)
+    /// winMargin = remaining / starting resource, in [0, 1]
+    /// </summary>
+    public void OnLevelCompleteWithMargin(int levelId, int score, float timeSeconds, int ballsLeft, int ballsAtStart)
+    {
+        LvlUpEvents.TrackLevelComplete(levelId, score, timeSeconds, winMargin: ballsLeft / (float)ballsAtStart);
+    }
+
+    /// <summary>
     /// Example: Track level failure using helper method
     /// Call this when player fails a level
     /// </summary>

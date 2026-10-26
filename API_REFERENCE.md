@@ -732,27 +732,34 @@ LvlUpEvents.TrackLevelStart(5, "Forest Battle", new Dictionary<string, object> {
 #### TrackLevelComplete
 ```csharp
 public static void TrackLevelComplete(int levelId, int score, float timeSeconds, Dictionary<string, object> additionalProperties = null)
-public static void TrackLevelComplete(int levelId, int score, float timeSeconds, int stars, Dictionary<string, object> additionalProperties = null)
+public static void TrackLevelComplete(int levelId, int score, float timeSeconds, float winMargin, Dictionary<string, object> additionalProperties = null)
 ```
 Track when a player completes a level.
+
+`winMargin` (1.13.0+) is remaining ÷ starting resource at the win, in [0, 1]: balls left ÷ balls at start, moves left ÷ move limit, and so on. 0 means the player won with nothing to spare. The level funnel shows the average (**Avg Win Margin**) and the share of wins with a margin of 0.1 or less (**Near-miss Wins %**). Values outside [0, 1] or NaN are dropped with a warning. A `winMargin` argument overrides a `winMargin` key in `additionalProperties`.
 
 **Example:**
 ```csharp
 LvlUpEvents.TrackLevelComplete(5, 12500, 125.5f);
-LvlUpEvents.TrackLevelComplete(5, 12500, 125.5f, 3);
+LvlUpEvents.TrackLevelComplete(5, 12500, 125.5f, new Dictionary<string, object> { { "stars", 3 } });
+LvlUpEvents.TrackLevelComplete(5, 12500, 125.5f, winMargin: ballsLeft / (float)ballsAtStart);
 ```
 
 #### TrackLevelFailed
 ```csharp
 public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, Dictionary<string, object> additionalProperties = null)
 public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, Dictionary<string, object> additionalProperties = null)
+public static void TrackLevelFailed(int levelId, string reason, float timeSeconds, int attempts, float objectiveProgress, Dictionary<string, object> additionalProperties = null)
 ```
 Track when a player fails a level.
+
+`objectiveProgress` is the share of the level objective done at the fail, in [0, 1]. The level funnel shows the average (**Avg Fail Progress**, fails with progress above 0) and the share of those fails at 0.9 or more (**Near-miss Fails %**).
 
 **Example:**
 ```csharp
 LvlUpEvents.TrackLevelFailed(5, "player_death", 45.2f);
 LvlUpEvents.TrackLevelFailed(5, "time_expired", 180f, 3);
+LvlUpEvents.TrackLevelFailed(5, "out_of_balls", 60f, 2, objectiveProgress: 0.9f);
 ```
 
 **See STANDARD_EVENT_HELPERS.md for complete documentation.**
