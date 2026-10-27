@@ -218,6 +218,97 @@ namespace LvlUp
 
         #endregion
 
+        #region LiveOps Tracking
+
+        /// <summary>Live event, pass and purchase-offer telemetry.</summary>
+        public static class LiveOps
+        {
+            private static LiveOpsTrackingService Service
+            {
+                get
+                {
+                    var manager = Manager;
+                    if (manager != null && manager.IsInitialized()) return manager.LiveOpsTracking;
+                    UnityEngine.Debug.LogError("[LvlUp] SDK not initialized. Call Initialize() first.");
+                    return null;
+                }
+            }
+
+            /// <summary>Track availability once per run.</summary>
+            public static void Eligible(LiveOpsRun run)
+            {
+                Service?.Eligible(run);
+            }
+
+            /// <summary>Track a popup impression.</summary>
+            public static void Impression(LiveOpsRun run, string surface, bool manual = false)
+            {
+                Service?.Impression(run, surface, manual);
+            }
+
+            /// <summary>Track participation once per run.</summary>
+            public static void Join(LiveOpsRun run, bool optIn, double? target = null)
+            {
+                Service?.Join(run, optIn, target);
+            }
+
+            /// <summary>Track non-negative progress.</summary>
+            public static void Progress(LiveOpsRun run, double progress, double? target = null, int? stage = null, double? delta = null)
+            {
+                Service?.Progress(run, progress, target, stage, delta);
+            }
+
+            /// <summary>Track positive progress lost while the run continues.</summary>
+            public static void Setback(LiveOpsRun run, double progress, double lost, int? stage = null)
+            {
+                Service?.Setback(run, progress, lost, stage);
+            }
+
+            /// <summary>Track the outcome once per run.</summary>
+            public static void Finish(LiveOpsRun run, LiveOpsOutcome outcome, string reason = null, double? progress = null, int? stage = null)
+            {
+                Service?.Finish(run, outcome, reason, progress, stage);
+            }
+
+            /// <summary>Track a granted reward.</summary>
+            public static void Claim(LiveOpsRun run, int stage, LiveOpsClaim details = null)
+            {
+                Service?.Claim(run, stage, details);
+            }
+
+            /// <summary>Track an unsuccessful claim or node purchase.</summary>
+            public static void ClaimFailed(LiveOpsRun run, int stage, string result, LiveOpsCost? cost = null)
+            {
+                Service?.ClaimFailed(run, stage, result, cost);
+            }
+
+            /// <summary>Track a successful pass or offer IAP.</summary>
+            public static void Purchase(LiveOpsRun run, string productId, string storeItemId = null, int? stage = null)
+            {
+                Service?.Purchase(run, productId, storeItemId, stage);
+            }
+
+            /// <summary>Track a popup closed without acting.</summary>
+            public static void Dismiss(LiveOpsRun run, string surface)
+            {
+                Service?.Dismiss(run, surface);
+            }
+
+            /// <summary>Track a missed day revival decision.</summary>
+            public static void Revive(LiveOpsRun run, bool revived, string costResource = null, double? costAmount = null)
+            {
+                Service?.Revive(run, revived, costResource, costAmount);
+            }
+
+            /// <summary>Track expiration once per run.</summary>
+            public static void Expire(LiveOpsRun run, int? unclaimed = null)
+            {
+                Service?.Expire(run, unclaimed);
+            }
+        }
+
+        #endregion
+
         #region Remote Config
 
         /// <summary>

@@ -208,6 +208,41 @@ Debug.Log($"Player completed {progress.completedCheckpoints} checkpoints");
 ```
 
 
+## LiveOps tracking
+
+Use `LvlUpSDK.LiveOps` after initialization, on Unity's main thread. Pin the run
+and variant when it starts and reuse them for every action of that run.
+
+```csharp
+using LvlUp;
+using LvlUp.Models;
+
+// Live event: season start in Unix seconds, fourth participation in this season.
+var run = LiveOpsRun.ForSeason("LavaQuest", LiveOpsFeatureType.Event,
+    1793059200L, 4, "control", runEndsAt: 1793145600L);
+LvlUpSDK.LiveOps.Eligible(run);
+LvlUpSDK.LiveOps.Impression(run, "starter");
+LvlUpSDK.LiveOps.Join(run, optIn: true, target: 7);
+LvlUpSDK.LiveOps.Progress(run, progress: 3, target: 7, stage: 3, delta: 1);
+LvlUpSDK.LiveOps.Finish(run, LiveOpsOutcome.Won, progress: 7);
+LvlUpSDK.LiveOps.Claim(run, stage: 7, details: new LiveOpsClaim
+{
+    RewardId = "final", ItemId = "booster_a", Track = "free", Cost = LiveOpsCost.Free
+});
+
+// Offer: retain the activation time and pinned variant across app restarts.
+var offer = LiveOpsRun.ForOffer("NoAds", 1793059200L, "control");
+LvlUpSDK.LiveOps.Impression(offer, "offer");
+LvlUpSDK.LiveOps.Purchase(offer, "com.game.noads", storeItemId: "NoAds");
+```
+
+Events use the ordinary offline queue and event monitor, with `levelOrder` added
+when known. Eligible, join, finish and expire are sent once per feature/run/action
+across restarts (the most recent 500 entries are retained). Feature ids are lowercased
+and sanitized; invalid ids and non-finite numbers are dropped with a warning.
+Track IAP money separately through revenue tracking. See the
+[API reference](API_REFERENCE.md#lvlupsdkliveops) for all actions and validation rules.
+
 ## Economy (wallet) tracking
 
 Use `LvlUpSDK.Economy` after initialization. Track each change once, where the wallet is
