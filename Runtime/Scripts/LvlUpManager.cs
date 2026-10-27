@@ -47,6 +47,7 @@ namespace LvlUp
         private AdMonetizationService _adMonetizationService;
         private EventTrackingService _eventTrackingService;
         internal EconomyTrackingService EconomyTracking { get; private set; }
+        internal LiveOpsTrackingService LiveOpsTracking { get; private set; }
         private RevenueTrackingService _revenueTrackingService;
         internal AttributionTrackingService AttributionTracking { get; private set; }
         private SessionManagementService _sessionManagementService;
@@ -176,6 +177,8 @@ namespace LvlUp
             CreateSessionManagementService();
             CreateEventTrackingService();
             EconomyTracking = new EconomyTrackingService(_config,
+                (name, properties) => TrackEvent(name, properties));
+            LiveOpsTracking = new LiveOpsTrackingService(_config,
                 (name, properties) => TrackEvent(name, properties));
             _eventTrackingService.BeforeFlush = () => EconomyTracking.Flush();
             CreateRevenueTrackingService();

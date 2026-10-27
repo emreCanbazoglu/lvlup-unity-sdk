@@ -5,6 +5,13 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-10-27
+
+### Added
+- **`LvlUpSDK.LiveOps`** tracks live events, passes and purchase offers through the ordinary event queue and `LvlUpEventMonitor.OnTracked`. Typed actions cover availability, impressions, joins, progress, setbacks, finishes, claims, purchases, dismissals, revivals and expiration, with current `levelOrder` attached automatically.
+- `LiveOpsRun` pins run identity and variant, with season and offer helpers. Validation normalizes ids and rejects invalid numbers without throwing to the game. Eligible, join, finish and expire are deduplicated across restarts with a PlayerPrefs guard bounded to the most recent 500 entries.
+- EditMode coverage for LiveOps payloads, validation, run helpers and persisted deduplication.
+
 ## [1.14.0] - 2026-10-26
 
 ### Added

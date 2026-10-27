@@ -7,6 +7,7 @@ Complete API documentation for the LvlUp Unity SDK.
 - [LvlUpConfig](#lvlupconfig)
 - [Models](#models)
 - [Events](#events)
+- [LvlUpSDK.LiveOps](#lvlupsdkliveops)
 
 ---
 
@@ -875,3 +876,51 @@ For questions or issues:
 - 📧 Email: support@lvlup.com
 - 🐛 GitHub Issues: https://github.com/yourusername/lvlup-unity-sdk/issues
 
+
+## LvlUpSDK.LiveOps
+
+Call after SDK initialization on Unity's main thread. Models are in `LvlUp.Models`.
+
+```csharp
+public static void Eligible(LiveOpsRun run);
+public static void Impression(LiveOpsRun run, string surface, bool manual = false);
+public static void Join(LiveOpsRun run, bool optIn, double? target = null);
+public static void Progress(LiveOpsRun run, double progress, double? target = null, int? stage = null, double? delta = null);
+public static void Setback(LiveOpsRun run, double progress, double lost, int? stage = null);
+public static void Finish(LiveOpsRun run, LiveOpsOutcome outcome, string reason = null, double? progress = null, int? stage = null);
+public static void Claim(LiveOpsRun run, int stage, LiveOpsClaim details = null);
+public static void ClaimFailed(LiveOpsRun run, int stage, string result, LiveOpsCost? cost = null);
+public static void Purchase(LiveOpsRun run, string productId, string storeItemId = null, int? stage = null);
+public static void Dismiss(LiveOpsRun run, string surface);
+public static void Revive(LiveOpsRun run, bool revived, string costResource = null, double? costAmount = null);
+public static void Expire(LiveOpsRun run, int? unclaimed = null);
+```
+
+`LiveOpsRun(featureId, featureType, runId, variantId, runStartedAt = null, runEndsAt = null)`
+pins one run's identity. `LiveOpsRun.ForSeason(featureId, type, seasonStartUnix,
+participationCount, variantId, runEndsAt = null)` builds `{featureId}:{seasonStartUnix}:{participationCount}`;
+`LiveOpsRun.ForOffer(featureId, activationUnix, variantId, runEndsAt = null)` builds
+`{featureId}:{activationUnix}` and selects `Offer`. Times are Unix seconds (`long?`).
+`LiveOpsFeatureType` is `Event`, `Pass` or `Offer`; `LiveOpsOutcome` is `Won`, `Failed`,
+`Timeout` or `Disabled`; `LiveOpsCost` is `Free`, `Soft` or `Iap`. Enums are sent lowercase.
+
+`LiveOpsClaim` has optional `RewardId`, `ItemId`, `Track` (`free`/`pass`),
+`Cost` (`LiveOpsCost?`), `CostResource`, `CostAmount` (`double?`), `StoreItemId`, and `ProductId`.
+Soft claims require `CostResource` and `CostAmount`; IAP claims require `StoreItemId`
+and `ProductId`. Product, store, reward and item ids retain their original spelling.
+
+All actions send `liveops` through the event queue and event monitor, with common
+`action`, `featureId`, `featureType`, `runId`, `variantId`, optional run timestamps,
+and current `levelOrder` when known. Feature ids are lowercased and characters outside
+`[a-z0-9_]` become `_`; empty ids or ids longer than 64 are dropped. Run ids must
+contain 1–128 characters. Empty variants become `default`; variants are truncated to 64.
+Reasons and claim failure results are lowercased and sanitized. Surface values are
+`starter`, `progression`, `win`, `rewards`, `purchase`, `ended`, `revive`, `offer`,
+`chip`, or `other`; unknown values become `other`.
+
+Non-finite numbers are dropped, progress must be non-negative, lost progress must
+be positive, and negative stages and unclaimed counts become zero. Invalid input
+warns once and never throws from tracking. `Eligible`, `Join`, `Finish`, and `Expire`
+are deduplicated by feature, run and action across restarts using PlayerPrefs;
+only the most recent 500 entries are retained. Older entries can be tracked again.
+`Purchase` records product identity only; report money through revenue tracking.
