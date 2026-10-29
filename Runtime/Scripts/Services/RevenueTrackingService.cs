@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using UnityEngine;
 using LvlUp.Models;
 using LvlUp.Utils;
@@ -122,6 +123,11 @@ namespace LvlUp.Services
             // Consume the pending placement only for purchases that are actually queued.
             if (revenueData.revenueType == "IN_APP_PURCHASE")
                 revenueData.iapPlacement = PurchasePlacementContext.Shared.Resolve(revenueData.productId, revenueData.iapPlacement);
+
+            // A batch in flight when the app is paused is also persisted, and the copy is resent on the next
+            // launch if the app is killed before the response arrives. The ID lets the backend drop that resend.
+            if (revenueData.revenueType == "AD_IMPRESSION" && string.IsNullOrEmpty(revenueData.adImpressionId))
+                revenueData.adImpressionId = Guid.NewGuid().ToString("N");
 
             // Populate context from current session and metadata
             PopulateRevenueContext(revenueData);
@@ -295,7 +301,8 @@ namespace LvlUp.Services
 
                 for (int i = 0; i < itemsToStore; i++)
                 {
-                    string json = JsonUtility.ToJson(revenue[startIndex + i]);
+                    // JsonUtility omits Dictionary and nullable fields, including abTests and currentLevelOrder.
+                    string json = JsonConvert.SerializeObject(revenue[startIndex + i]);
                     string key = $"{PREF_OFFLINE_REVENUE}_{i}";
                     PlayerPrefs.SetString(key, json);
                 }
@@ -546,7 +553,7 @@ namespace LvlUp.Services
                                 continue;
                             }
 
-                            var revenue = JsonUtility.FromJson<RevenueData>(json);
+                            var revenue = JsonConvert.DeserializeObject<RevenueData>(json);
                             if (revenue != null)
                             {
                                 _revenueBatch.Add(revenue);

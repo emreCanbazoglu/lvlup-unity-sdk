@@ -5,6 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - 2026-10-29
+
+### Fixed
+- **Ad impressions carry a stable `adImpressionId`.** Revenue that is being sent when the app pauses is also saved to disk, so it survives a kill. If the app is killed in the background before the response arrives, the next launch resends it, although the server already has it. In It's Cannon Time that resend was 10–14% of ad impression rows, 12–17% of ad revenue. Each impression now gets a unique ID when it is tracked, and the resend carries the same ID, so the backend can drop it.
+- **Saved revenue keeps its A/B tests.** Saved revenue was written with `JsonUtility`, which drops dictionaries and nullable fields, so a resent impression lost `abTests` (and a purchase lost `currentLevelOrder` and `transactionTimestamp`). Saved revenue is now written with Newtonsoft, like saved events. Revenue saved by earlier versions still loads.
+
+### Added
+- EditMode coverage for impression IDs and saved revenue.
+
 ## [1.15.0] - 2026-10-27
 
 ### Added
