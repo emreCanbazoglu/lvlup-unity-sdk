@@ -28,6 +28,7 @@ namespace LvlUp
                 { "levelId", levelId },
             };
 
+            AddTotalPlaytime(properties);
             MergeProperties(properties, additionalProperties);
 
             // Create LevelEvent and apply global level funnel config
@@ -76,6 +77,7 @@ namespace LvlUp
                 { "timeSeconds", timeSeconds },
             };
 
+            AddTotalPlaytime(properties);
             MergeProperties(properties, additionalProperties);
             
             // Create LevelEvent and apply global level funnel config
@@ -145,6 +147,7 @@ namespace LvlUp
                 { "timeSeconds", timeSeconds },
             };
 
+            AddTotalPlaytime(properties);
             MergeProperties(properties, additionalProperties);
             
             // Create LevelEvent and apply global level funnel config
@@ -179,6 +182,7 @@ namespace LvlUp
                 { "attempts", attempts },
             };
 
+            AddTotalPlaytime(properties);
             MergeProperties(properties, additionalProperties);
 
             // Create LevelEvent and apply global level funnel config
@@ -223,6 +227,7 @@ namespace LvlUp
                 { "objectiveProgress", objectiveProgress },
             };
 
+            AddTotalPlaytime(properties);
             MergeProperties(properties, additionalProperties);
 
             // Create LevelEvent and apply global level funnel config
@@ -253,6 +258,17 @@ namespace LvlUp
                     baseProperties[prop.Key] = prop.Value;
                 }
             }
+        }
+
+        /// <summary>
+        /// Lifetime foreground playtime at the moment of the event. The dashboard's
+        /// "Time to Reach" reads it from the first level_start of each level.
+        /// </summary>
+        private static void AddTotalPlaytime(Dictionary<string, object> properties)
+        {
+            var totalPlaytimeSeconds = LvlUpManager.Instance?.GetTotalPlaytimeSeconds();
+            if (totalPlaytimeSeconds.HasValue)
+                properties["totalPlaytimeSeconds"] = totalPlaytimeSeconds.Value;
         }
 
         #endregion

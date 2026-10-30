@@ -763,6 +763,8 @@ LvlUpEvents.TrackLevelFailed(5, "time_expired", 180f, 3);
 LvlUpEvents.TrackLevelFailed(5, "out_of_balls", 60f, 2, objectiveProgress: 0.9f);
 ```
 
+All level events automatically include `totalPlaytimeSeconds`: lifetime foreground playtime of this install in seconds (read it with `LvlUpManager.Instance.GetTotalPlaytimeSeconds()`).
+
 **See STANDARD_EVENT_HELPERS.md for complete documentation.**
 
 ---

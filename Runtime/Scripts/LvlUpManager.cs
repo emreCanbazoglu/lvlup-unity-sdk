@@ -51,6 +51,7 @@ namespace LvlUp
         private RevenueTrackingService _revenueTrackingService;
         internal AttributionTrackingService AttributionTracking { get; private set; }
         private SessionManagementService _sessionManagementService;
+        private PlaytimeTracker _playtimeTracker;
         
         // Cached geo data
         private GeoData _cachedGeoData;
@@ -135,6 +136,9 @@ namespace LvlUp
                 _crashReporter.SetEnabled(true);
             }
             
+            _playtimeTracker = new PlaytimeTracker();
+            _playtimeTracker.Start();
+
             _isInitialized = true;
 
             if (_config.enableDebugLogs)
@@ -321,6 +325,11 @@ namespace LvlUp
                 return;
 
             if (pauseStatus)
+                _playtimeTracker?.Pause();
+            else
+                _playtimeTracker?.Start();
+
+            if (pauseStatus)
             {
                 if (_config.autoTrackSessions && _config.autoTrackAppLifecycle)
                     TrackEvent("app_paused", null);
@@ -350,6 +359,7 @@ namespace LvlUp
             if (_isInitialized)
             {
                 AttributionTracking?.Tick();
+                _playtimeTracker?.Tick();
                 EconomyTracking?.FlushExpired();
                 _sessionManagementService?.RestartHeartbeatIfNeeded();
             }
@@ -359,6 +369,8 @@ namespace LvlUp
         {
             if (!_isInitialized)
                 return;
+
+            _playtimeTracker?.Pause();
 
             var hasActiveSession = _sessionManagementService?.GetCurrentSession() != null;
 
@@ -835,6 +847,15 @@ namespace LvlUp
         public int? GetCurrentLevel()
         {
             return _config.currentLevelOrder;
+        }
+
+        /// <summary>
+        /// Lifetime foreground playtime of this install in seconds (null before Initialize).
+        /// Auto-attached to level events as <c>totalPlaytimeSeconds</c>.
+        /// </summary>
+        public int? GetTotalPlaytimeSeconds()
+        {
+            return _playtimeTracker?.TotalSeconds;
         }
 
         /// <summary>
