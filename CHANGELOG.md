@@ -5,6 +5,13 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-10-30
+
+### Added
+- **Level events carry lifetime playtime.** `level_start`, `level_complete` and `level_failed` now include `totalPlaytimeSeconds`: total foreground time of this install, menus, retries and ads included. The dashboard uses the value on each level's first `level_start` to show how long players actually need to reach that level. The counter is stored in PlayerPrefs (`LvlUp_TotalPlaytimeSeconds`), starts at `Initialize`, stops while the app is in the background, and is saved on pause, on quit and every 30 seconds.
+- `LvlUpManager.GetTotalPlaytimeSeconds()`.
+- EditMode coverage for the playtime counter.
+
 ## [1.15.1] - 2026-10-29
 
 ### Fixed
