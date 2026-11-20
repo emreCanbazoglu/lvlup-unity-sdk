@@ -412,16 +412,22 @@ namespace LvlUp
         /// </summary>
         public static void SetDeviceAdvertisingId(string advertisingId)
         {
+            string previousAdvertisingId = _deviceAdvertisingId;
             _deviceAdvertisingId = string.IsNullOrWhiteSpace(advertisingId) ? null : advertisingId.Trim();
 
             var service = _instance?._remoteConfigService;
-            if (service != null)
-            {
-                service.SetDeviceAdvertisingId(_deviceAdvertisingId);
-                // If configs already loaded, re-fetch so the header (and any grant) applies now.
-                if (service.HasLoadedConfigs)
-                    service.FetchAsync(_instance, null);
-            }
+            if (service == null)
+                return;
+
+            service.SetDeviceAdvertisingId(_deviceAdvertisingId);
+
+            if (_deviceAdvertisingId == previousAdvertisingId)
+                return;
+
+            // A fetch that is loaded or still running was built without this ID, so fetch again for
+            // the grant to apply. The fetch gate runs it after the running one instead of dropping it.
+            if (service.HasLoadedConfigs || service.IsFetching)
+                service.FetchAsync(_instance, null);
         }
 
 
@@ -689,7 +695,7 @@ namespace LvlUp
                 return;
 
             _remoteConfigService.SetUserId(userId);
-            if (_remoteConfigService.HasLoadedConfigs)
+            if (_remoteConfigService.HasLoadedConfigs || _remoteConfigService.IsFetching)
                 _remoteConfigService.FetchAsync(this, null);
         }
 
