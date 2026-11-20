@@ -5,6 +5,15 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-11-20
+
+### Fixed
+- **A late advertising ID now reaches the backend.** `SetDeviceAdvertisingId` called while the first config fetch was still running did not fetch again, and any fetch requested during another one was dropped with "Already fetching configs". A device whose ad ID arrived after `Initialize` (a slow ATT or consent prompt on first launch) never got its `debugger_enabled` grant that session. Requests made during a fetch now run as one follow-up fetch when it ends, and their callbacks fire then. A user ID set during the first fetch is applied the same way, so A/B assignment no longer misses it.
+
+### Added
+- `RemoteConfigService.IsFetching`.
+- EditMode coverage for the fetch gate.
+
 ## [1.16.0] - 2026-10-30
 
 ### Added

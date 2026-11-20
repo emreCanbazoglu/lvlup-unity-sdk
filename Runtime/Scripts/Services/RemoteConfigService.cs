@@ -25,7 +25,7 @@ namespace LvlUp.Services
         private string _currentEnvironment = "production";
         private bool _currentAbTestsForced = false;
         private bool _isInitialized = false;
-        private bool _isFetching = false;
+        private readonly RemoteConfigFetchGate _fetchGate = new RemoteConfigFetchGate();
         private bool _logConfigResult = false;
 
         // Advertising ID of this device (IDFA/GAID), sent as the X-Device-Ad-Id header on the
@@ -168,18 +168,24 @@ namespace LvlUp.Services
                 return;
             }
 
-            coroutineRunner.StartCoroutine(FetchAsyncInternal(onComplete));
+            if (!_fetchGate.TryBegin(onComplete))
+                return;
+
+            coroutineRunner.StartCoroutine(FetchAsyncInternal(coroutineRunner, onComplete));
         }
 
-        private IEnumerator FetchAsyncInternal(Action<bool> onComplete)
+        private void EndFetch(MonoBehaviour coroutineRunner, bool success, Action<bool> onComplete)
         {
-            if (_isFetching)
-            {
-                Debug.LogWarning("[LvlUp] Already fetching configs");
-                yield break;
-            }
+            bool hasFollowUp = _fetchGate.End(out Action<bool> followUpOnComplete);
 
-            _isFetching = true;
+            onComplete?.Invoke(success);
+
+            if (hasFollowUp)
+                coroutineRunner.StartCoroutine(FetchAsyncInternal(coroutineRunner, followUpOnComplete));
+        }
+
+        private IEnumerator FetchAsyncInternal(MonoBehaviour coroutineRunner, Action<bool> onComplete)
+        {
             int retryCount = 0;
             float retryDelay = INITIAL_RETRY_DELAY;
 
@@ -261,8 +267,7 @@ namespace LvlUp.Services
                 if (success)
                 {
                     Debug.Log("[LvlUp] Configs fetched successfully");
-                    _isFetching = false;
-                    onComplete?.Invoke(true);
+                    EndFetch(coroutineRunner, true, onComplete);
                     yield break;
                 }
 
@@ -280,14 +285,12 @@ namespace LvlUp.Services
             if (_cacheService.TryLoadConfigs(GetCurrentEnvironment(), out var cachedConfigsResponse))
             {
                 ProcessConfigsResponse(cachedConfigsResponse, isFromCache: true);
-                _isFetching = false;
-                onComplete?.Invoke(true);
+                EndFetch(coroutineRunner, true, onComplete);
             }
             else
             {
                 Debug.LogError("[LvlUp] Failed to fetch configs and no valid cache available");
-                _isFetching = false;
-                onComplete?.Invoke(false);
+                EndFetch(coroutineRunner, false, onComplete);
             }
         }
 
@@ -691,6 +694,11 @@ namespace LvlUp.Services
         /// i.e. config values are safe to read. This is the correct "ready" signal to wait on.
         /// </summary>
         public bool HasLoadedConfigs => _hasLoadedConfigs;
+
+        /// <summary>
+        /// True while a config fetch is running. A fetch requested meanwhile runs right after it.
+        /// </summary>
+        public bool IsFetching => _fetchGate.IsFetching;
 
         /// <summary>
         /// Get current environment
