@@ -95,6 +95,43 @@ namespace LvlUp.Tests
         }
 
         [Test]
+        public void QueuedRevenueIsOnDiskWithoutAPause()
+        {
+            var tracker = CreateTracker(null);
+            tracker.TrackAdImpression("AppLovin", "INTER", 0.01);
+            string impressionId = GetQueue(tracker)[0].adImpressionId;
+
+            var restored = CreateTracker(null);
+            restored.Initialize();
+
+            Assert.AreEqual(1, GetQueue(restored).Count);
+            Assert.AreEqual(impressionId, GetQueue(restored)[0].adImpressionId);
+        }
+
+        [Test]
+        public void LoadedRevenueStaysOnDiskUntilSent()
+        {
+            var tracker = CreateTracker(null);
+            tracker.TrackAdImpression("AppLovin", "INTER", 0.01);
+
+            CreateTracker(null).Initialize();
+            var relaunched = CreateTracker(null);
+            relaunched.Initialize();
+
+            Assert.AreEqual(1, GetQueue(relaunched).Count);
+        }
+
+        [Test]
+        public void JournaledImpressionKeepsItsIdAndTime()
+        {
+            var tracker = CreateTracker(null);
+            tracker.TrackResolvedAdImpression("AppLovin", "INTER", 0.01, "unit", null, "c", "journal_id", 1234);
+
+            Assert.AreEqual("journal_id", GetQueue(tracker)[0].adImpressionId);
+            Assert.AreEqual(1234, GetQueue(tracker)[0].timestamp);
+        }
+
+        [Test]
         public void RevenuePersistedByEarlierVersionsStillLoads()
         {
             var legacy = new RevenueData { revenueType = "AD_IMPRESSION", revenue = 0.02, adFormat = "INTER" };

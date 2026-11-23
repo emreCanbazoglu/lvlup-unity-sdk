@@ -335,6 +335,7 @@ namespace LvlUp
                     TrackEvent("app_paused", null);
                 
                 // Persist any pending events and revenue before going to background
+                _adMonetizationService?.DispatchPending();
                 EconomyTracking?.Flush();
                 _eventTrackingService?.PersistEvents();
                 _revenueTrackingService?.PersistRevenue();
@@ -358,6 +359,7 @@ namespace LvlUp
             // Safety check: Restart heartbeat if session exists but coroutine stopped
             if (_isInitialized)
             {
+                _adMonetizationService?.DispatchPending();
                 AttributionTracking?.Tick();
                 _playtimeTracker?.Tick();
                 EconomyTracking?.FlushExpired();

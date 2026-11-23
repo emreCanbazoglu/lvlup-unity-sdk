@@ -35,9 +35,7 @@ namespace LvlUp.Services
         private const string PREF_OFFLINE_REVENUE = "LvlUp_OfflineRevenue";
         private const string PREF_OFFLINE_REVENUE_COUNT = "LvlUp_OfflineRevenueCount";
 
-        // Memory and storage guards
         private const int MAX_REVENUE_QUEUE_HARD_CAP = 500; // Hard cap for queued revenue items
-        private const long MAX_MEMORY_FREE_THRESHOLD = 100 * 1024 * 1024; // 100MB - minimum free memory required to persist
 
         // Transaction deduplication — prevents double-tracking when both
         // TrackPurchase() and manual TrackInAppPurchase() are called for the same purchase.
@@ -139,6 +137,9 @@ namespace LvlUp.Services
             _revenueBatch.Add(revenueData);
             EnforceRevenueQueueCap();
 
+            // Written as soon as it is queued, not only on pause, so a crash or kill keeps it for the next launch.
+            PersistRevenue();
+
             if (_config.enableDebugLogs)
             {
                 string type = revenueData.revenueType == "AD_IMPRESSION" ? "Ad" : "IAP";
@@ -161,12 +162,13 @@ namespace LvlUp.Services
             string adUnitId = null, string placement = null, string creativeId = null)
         {
             string resolvedPlacement = AdPlacementContext.Shared.Resolve(adFormat, placement);
-            TrackResolvedAdImpression(adNetworkName, adFormat, revenue, adUnitId, resolvedPlacement, creativeId);
+            TrackResolvedAdImpression(adNetworkName, adFormat, revenue, adUnitId, resolvedPlacement, creativeId,
+                null, 0);
         }
 
         // The ad-network service has already resolved and consumed custom placement state.
         internal void TrackResolvedAdImpression(string adNetworkName, string adFormat, double revenue,
-            string adUnitId, string placement, string creativeId)
+            string adUnitId, string placement, string creativeId, string adImpressionId, long timestamp)
         {
             var revenueData = new RevenueData
             {
@@ -177,8 +179,12 @@ namespace LvlUp.Services
                 adFormat = adFormat,
                 adUnitId = adUnitId,
                 adPlacement = placement,
-                adCreativeId = creativeId
+                adCreativeId = creativeId,
+                adImpressionId = adImpressionId
             };
+
+            if (timestamp > 0)
+                revenueData.timestamp = timestamp;
 
             TrackRevenue(revenueData);
         }
@@ -237,36 +243,6 @@ namespace LvlUp.Services
         }
 
         /// <summary>
-        /// Check if we have enough memory and storage to persist revenue
-        /// </summary>
-        private bool CanPersistRevenue()
-        {
-            if (!_config.persistQueueToDisk)
-            {
-                return false;
-            }
-
-            // Check free memory
-            long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
-            if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
-            {
-                Debug.LogWarning($"[LvlUp] Insufficient memory to persist revenue. Free memory: {freeMemory / (1024 * 1024)}MB, Required: {MAX_MEMORY_FREE_THRESHOLD / (1024 * 1024)}MB");
-                return false;
-            }
-
-            // Check current persisted revenue count
-            int currentPersistedCount = PlayerPrefs.GetInt(PREF_OFFLINE_REVENUE_COUNT, 0);
-            if (currentPersistedCount >= GetMaxRevenueQueueSize())
-            {
-                Debug.LogWarning($"[LvlUp] Max persisted revenue limit reached: {currentPersistedCount}/{GetMaxRevenueQueueSize()}. Clearing old revenue data.");
-                ClearPersistedRevenue();
-                return true; // Continue with fresh slate
-            }
-
-            return true;
-        }
-
-        /// <summary>
         /// Persist revenue (Ad Impression or In-App Purchase) for offline support with guards
         /// </summary>
         public void PersistRevenue(List<RevenueData> revenue)
@@ -277,13 +253,6 @@ namespace LvlUp.Services
             if (revenue == null || revenue.Count == 0)
             {
                 ClearPersistedRevenue();
-                return;
-            }
-
-            // Check if we can persist (memory and storage guards)
-            if (!CanPersistRevenue())
-            {
-                Debug.LogWarning("[LvlUp] Cannot persist revenue due to memory/storage constraints. Dropping revenue data.");
                 return;
             }
 
@@ -522,16 +491,6 @@ namespace LvlUp.Services
                     return;
                 }
 
-                // Check free memory before loading
-                long freeMemory = SystemInfo.systemMemorySize * 1024L * 1024L - UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong();
-                if (freeMemory < MAX_MEMORY_FREE_THRESHOLD)
-                {
-                    Debug.LogWarning($"[LvlUp] Insufficient free memory ({freeMemory / (1024 * 1024)}MB) to load persisted revenue. Skipping load to prevent crash.");
-                    ClearPersistedRevenue();
-                    SweepOrphanedKeys(0);
-                    return;
-                }
-
                 int loadedCount = 0;
                 int skippedCount = 0;
 
@@ -581,6 +540,10 @@ namespace LvlUp.Services
                     Debug.Log($"[LvlUp] Loaded {loadedCount} persisted offline revenue items" + (skippedCount > 0 ? $" (skipped {skippedCount} corrupted)" : ""));
 
                 EnforceRevenueQueueCap();
+
+                // Loaded revenue stays on disk until the server has it.
+                if (loadedCount > 0)
+                    PersistRevenue();
             }
             catch (Exception ex)
             {

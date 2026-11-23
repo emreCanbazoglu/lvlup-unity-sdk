@@ -5,6 +5,20 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-11-23
+
+### Fixed
+- **Ad revenue is no longer lost when the app dies during or right after an ad.** MAX reports interstitial and rewarded revenue on a background thread while the ad is still showing. The SDK queued it on that thread in memory only and saved it to disk only on pause or quit, so a crash or kill in between lost it. In It's Cannon Time, LvlUp got 92% of MAX's impressions and 88% of its revenue for Nov 9–22, and 83% / 76% after 1.3.1. GameAnalytics, which writes each impression to disk at once, got 99%. Each impression is now written to `lvlup_pending_ad_impressions.jsonl` in `persistentDataPath` on the reporting thread, handed to the revenue queue on the main thread, and replayed on the next launch if the app died first. A replay keeps its `adImpressionId` and original timestamp, so the backend drops any copy it already has.
+- **Queued revenue is saved as soon as it is queued**, not only on pause or quit, and revenue loaded on launch stays saved until the server confirms it.
+- **Revenue is no longer dropped for "low memory".** Saving and loading skipped, and loading deleted, saved revenue when total RAM minus Unity's allocations was under 100 MB, which is not free memory.
+
+### Changed
+- `AdMonetizationService.TrackAdImpressionDelegate` takes `adImpressionId` and `timestamp`, and is always invoked on the main thread. `AdMonetizationService.DispatchPending()` hands journaled impressions to it; `LvlUpManager` calls it every frame and before saving on pause.
+- `AdMonetizationService.TrackMaxAdImpression` and `TrackAdImpression` can be called from any thread.
+
+### Added
+- EditMode coverage for the impression journal, background-thread impressions and save-on-queue.
+
 ## [1.16.1] - 2026-11-20
 
 ### Fixed
