@@ -12,7 +12,13 @@ namespace LvlUp.Models
         // Session-specific fields
         public string sessionId;  // Used internally, not sent in body (goes in URL)
         public string endTime;    // Optional: ISO date format, defaults to current time on backend
-        
+
+        public const int FOREGROUND_NOT_MEASURED = -1;
+
+        // On-screen seconds of the session; the backend ignores negative values.
+        // An int rather than int? so it survives JsonUtility persistence of pending ends.
+        public int foregroundSeconds = FOREGROUND_NOT_MEASURED;
+
         // Constructor with event name for LvlUpEvent base
         public SessionEndRequest() : base("session_end", null)
         {

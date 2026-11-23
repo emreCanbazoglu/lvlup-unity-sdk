@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -52,6 +53,7 @@ namespace LvlUp
         internal AttributionTrackingService AttributionTracking { get; private set; }
         private SessionManagementService _sessionManagementService;
         private PlaytimeTracker _playtimeTracker;
+        private const string SESSION_SNAPSHOT_FILE_NAME = "lvlup_session_snapshot.json";
         
         // Cached geo data
         private GeoData _cachedGeoData;
@@ -233,7 +235,10 @@ namespace LvlUp
                 {
                     EconomyTracking?.AutoSnapshot("session_start");
                     AttributionTracking?.OnSessionStarted();
-                }
+                },
+                new SessionForegroundTracker(
+                    () => ForegroundClock.Seconds,
+                    Path.Combine(Application.persistentDataPath, SESSION_SNAPSHOT_FILE_NAME))
             );
         }
 
@@ -321,6 +326,8 @@ namespace LvlUp
 
         private void OnApplicationPause(bool pauseStatus)
         {
+            ForegroundClock.Current.OnUnityPause(pauseStatus);
+
             if (!_isInitialized)
                 return;
 
@@ -360,6 +367,7 @@ namespace LvlUp
             if (_isInitialized)
             {
                 _adMonetizationService?.DispatchPending();
+                _sessionManagementService?.TickForeground();
                 AttributionTracking?.Tick();
                 _playtimeTracker?.Tick();
                 EconomyTracking?.FlushExpired();
