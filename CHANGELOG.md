@@ -5,6 +5,19 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-11-24
+
+### Added
+- **Sessions report their on-screen time.** Heartbeats and session ends carry `foregroundSeconds`: seconds the app was in the foreground during the session, measured on the device. The backend uses it for session length and playtime instead of its own `max(endTime, lastHeartbeat) - startTime`, which counted time in the background during the 150-second resume grace and was only as precise as the 30-second heartbeat. Session boundaries are unchanged: a session still survives a background stay of up to 150 seconds, so session counts stay comparable with earlier versions; only length changes.
+- **On Android the clock counts the way GameAnalytics does.** `LvlUpForegroundClock` (Java, `Plugins/Android`) watches the activity lifecycle and stops only when none of the app's activities is started, so full-screen ads and purchase dialogs keep counting although Unity pauses behind them. It starts before the first scene loads, so the first session counts from launch. Elsewhere, or if the class is missing (stripped by R8 minification without a keep rule for `com.lvlup.analytics.LvlUpForegroundClock`), the clock follows Unity's `OnApplicationPause`.
+- **A killed session still reports its length.** The current session's on-screen time is saved to `lvlup_session_snapshot.json` in `persistentDataPath` every 8 seconds and on pause. If the process dies without ending the session, the next launch sends its end with that time.
+- **A session that times out in the background ends with its on-screen time.** Coming back after more than 150 seconds now sends the old session's end (at the time it was paused) before the new session starts, instead of leaving it to the backend's heartbeat timeout.
+- `SessionEndRequest.foregroundSeconds` (`-1` when not measured, which the backend ignores).
+- EditMode coverage for the clocks, the session tracker and its snapshot.
+
+### Compatibility
+- Needs the backend change that stores `foregroundSeconds`. Older backends ignore the field, and games on older SDKs keep the server-derived length.
+
 ## [1.17.0] - 2026-11-23
 
 ### Fixed

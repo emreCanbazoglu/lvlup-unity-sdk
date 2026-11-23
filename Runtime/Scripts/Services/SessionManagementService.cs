@@ -19,6 +19,7 @@ namespace LvlUp.Services
         private readonly Action<string> _onSessionIdChanged;
         private readonly Action<string> _onUserIdChanged;
         private readonly Action _onSessionStarted;
+        private readonly SessionForegroundTracker _foregroundTracker;
 
         // Session tracking
         private SessionData _currentSession;
@@ -58,6 +59,20 @@ namespace LvlUp.Services
             Action<string> onSessionIdChanged,
             Action<string> onUserIdChanged,
             Action onSessionStarted = null)
+            : this(httpClient, config, coroutineRunner, getGeoData, onSessionIdChanged, onUserIdChanged,
+                onSessionStarted, null)
+        {
+        }
+
+        internal SessionManagementService(
+            LvlUpHttpClient httpClient,
+            LvlUpConfig config,
+            MonoBehaviour coroutineRunner,
+            Func<GeoData> getGeoData,
+            Action<string> onSessionIdChanged,
+            Action<string> onUserIdChanged,
+            Action onSessionStarted,
+            SessionForegroundTracker foregroundTracker)
         {
             _httpClient = httpClient;
             _config = config;
@@ -66,6 +81,7 @@ namespace LvlUp.Services
             _onSessionIdChanged = onSessionIdChanged;
             _onUserIdChanged = onUserIdChanged;
             _onSessionStarted = onSessionStarted;
+            _foregroundTracker = foregroundTracker;
         }
 
         /// <summary>
@@ -74,6 +90,24 @@ namespace LvlUp.Services
         public void Initialize()
         {
             LoadPendingSessions();
+            QueueEndOfSessionLostToKill();
+        }
+
+        // A session whose process was killed never sent an end; its last snapshot becomes one.
+        private void QueueEndOfSessionLostToKill()
+        {
+            var snapshot = _foregroundTracker?.TakeSnapshot();
+            if (snapshot == null)
+                return;
+
+            _pendingSessionEnds.Add(new SessionEndRequest
+            {
+                sessionId = snapshot.sessionId,
+                endTime = snapshot.endTime,
+                foregroundSeconds = snapshot.foregroundSeconds
+            });
+            _hasOfflineSession = true;
+            PersistPendingSessions();
         }
 
         /// <summary>
@@ -85,6 +119,8 @@ namespace LvlUp.Services
             _currentUserMetadata = metadata ?? new UserMetadata();
 
             _onUserIdChanged?.Invoke(_currentUserId);
+
+            _foregroundTracker?.BeginSession();
 
             // Increment session number
             _sessionNumber = PlayerPrefs.GetInt(PREF_SESSION_NUMBER, 0) + 1;
@@ -157,7 +193,8 @@ namespace LvlUp.Services
             var request = new SessionEndRequest
             {
                 sessionId = _currentSession?.sessionId,
-                sessionNum = _sessionNumber
+                sessionNum = _sessionNumber,
+                foregroundSeconds = CurrentForegroundSeconds()
             };
 
             // Apply cached geo data if available
@@ -197,6 +234,7 @@ namespace LvlUp.Services
                 if (response.success)
                 {
                     StopHeartbeat();
+                    _foregroundTracker?.ClearSnapshot();
 
                     if (_config.enableDebugLogs)
                         Debug.Log($"[LvlUp] Session ended: {sessionId}");
@@ -263,11 +301,13 @@ namespace LvlUp.Services
                 // This allows short pauses/resumes without forcing a new session.
                 _pausedAtUtc = DateTime.UtcNow;
                 StopHeartbeat();
+                _foregroundTracker?.SaveSnapshot(_currentSession?.sessionId);
             }
             else
             {
-                var pausedForSeconds = _pausedAtUtc.HasValue
-                    ? (float)(DateTime.UtcNow - _pausedAtUtc.Value).TotalSeconds
+                var pausedAtUtc = _pausedAtUtc;
+                var pausedForSeconds = pausedAtUtc.HasValue
+                    ? (float)(DateTime.UtcNow - pausedAtUtc.Value).TotalSeconds
                     : 0f;
                 _pausedAtUtc = null;
 
@@ -278,13 +318,44 @@ namespace LvlUp.Services
                     return;
                 }
 
-                // Long pause: let backend timeout the old session and create a new one on resume.
+                // Long pause: end the old session with its on-screen time and start a new one.
                 if (!string.IsNullOrEmpty(_currentUserId))
                 {
+                    QueueEndOfPausedSession(pausedAtUtc);
                     _currentSession = null;
                     StartSession(_currentUserId, _currentUserMetadata);
                 }
             }
+        }
+
+        private void QueueEndOfPausedSession(DateTime? pausedAtUtc)
+        {
+            if (_currentSession == null)
+                return;
+
+            _pendingSessionEnds.Add(new SessionEndRequest
+            {
+                sessionId = _currentSession.sessionId,
+                sessionNum = _sessionNumber,
+                endTime = (pausedAtUtc ?? DateTime.UtcNow).ToString("o"),
+                foregroundSeconds = CurrentForegroundSeconds()
+            });
+            PersistPendingSessions();
+            _foregroundTracker?.ClearSnapshot();
+        }
+
+        private int CurrentForegroundSeconds()
+        {
+            return _foregroundTracker?.Seconds ?? SessionEndRequest.FOREGROUND_NOT_MEASURED;
+        }
+
+        /// <summary>
+        /// Saves the current session's on-screen time every few seconds, for recovery after a kill.
+        /// </summary>
+        public void TickForeground()
+        {
+            if (_currentSession != null)
+                _foregroundTracker?.Tick(_currentSession.sessionId);
         }
 
         /// <summary>
@@ -392,7 +463,8 @@ namespace LvlUp.Services
             {
                 countryCode = (_config.enableGeoTracking && geoData != null)
                     ? geoData.countryCode
-                    : (string)null
+                    : (string)null,
+                foregroundSeconds = _foregroundTracker?.Seconds
             };
 
             _coroutineRunner.StartCoroutine(SendHeartbeatWithRetryCoroutine(sessionId, endpoint, heartbeatData));
@@ -457,7 +529,8 @@ namespace LvlUp.Services
             var request = new SessionEndRequest
             {
                 sessionId = _currentSession?.sessionId,
-                sessionNum = _sessionNumber
+                sessionNum = _sessionNumber,
+                foregroundSeconds = CurrentForegroundSeconds()
             };
 
             var geoData = _getGeoData();
@@ -468,6 +541,7 @@ namespace LvlUp.Services
 
             _pendingSessionEnds.Add(request);
             PersistPendingSessions();
+            _foregroundTracker?.ClearSnapshot();
 
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] Queued session end on quit for session: {request.sessionId}");
