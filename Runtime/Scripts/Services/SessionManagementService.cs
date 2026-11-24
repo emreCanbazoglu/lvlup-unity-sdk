@@ -301,6 +301,7 @@ namespace LvlUp.Services
                 // This allows short pauses/resumes without forcing a new session.
                 _pausedAtUtc = DateTime.UtcNow;
                 StopHeartbeat();
+                _foregroundTracker?.MarkPaused();
                 _foregroundTracker?.SaveSnapshot(_currentSession?.sessionId);
             }
             else
@@ -338,7 +339,7 @@ namespace LvlUp.Services
                 sessionId = _currentSession.sessionId,
                 sessionNum = _sessionNumber,
                 endTime = (pausedAtUtc ?? DateTime.UtcNow).ToString("o"),
-                foregroundSeconds = CurrentForegroundSeconds()
+                foregroundSeconds = _foregroundTracker?.SecondsAtPause ?? SessionEndRequest.FOREGROUND_NOT_MEASURED
             });
             PersistPendingSessions();
             _foregroundTracker?.ClearSnapshot();
