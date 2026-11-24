@@ -5,16 +5,23 @@ import android.app.Application;
 import android.os.Bundle;
 import android.os.SystemClock;
 
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
+
 /**
  * Time the app has spent in the foreground since start(), counted the way GameAnalytics counts
  * sessions: the app is in the background only when none of its activities is started. A
  * full-screen ad or purchase dialog is another activity of the same app, so it keeps counting,
  * although Unity's own activity (and OnApplicationPause) is paused behind it.
+ *
+ * Started activities are tracked by identity, not counted: the activity passed to start() may still
+ * receive its own onActivityStarted, and a count would then never return to zero in the background.
  */
 public final class LvlUpForegroundClock implements Application.ActivityLifecycleCallbacks {
     private static LvlUpForegroundClock instance;
 
-    private int startedActivities;
+    private final Set<Activity> startedActivities = Collections.newSetFromMap(new WeakHashMap<Activity, Boolean>());
     private long accumulatedMs;
     private long foregroundSinceMs;
 
@@ -28,7 +35,7 @@ public final class LvlUpForegroundClock implements Application.ActivityLifecycle
         }
 
         LvlUpForegroundClock clock = new LvlUpForegroundClock();
-        clock.startedActivities = 1;
+        clock.startedActivities.add(currentActivity);
         clock.foregroundSinceMs = SystemClock.elapsedRealtime();
         currentActivity.getApplication().registerActivityLifecycleCallbacks(clock);
         instance = clock;
@@ -39,7 +46,7 @@ public final class LvlUpForegroundClock implements Application.ActivityLifecycle
             return 0;
         }
 
-        long running = instance.startedActivities > 0
+        long running = !instance.startedActivities.isEmpty()
                 ? SystemClock.elapsedRealtime() - instance.foregroundSinceMs
                 : 0;
         return instance.accumulatedMs + Math.max(0, running);
@@ -48,20 +55,25 @@ public final class LvlUpForegroundClock implements Application.ActivityLifecycle
     @Override
     public void onActivityStarted(Activity activity) {
         synchronized (LvlUpForegroundClock.class) {
-            if (startedActivities++ == 0) {
+            if (startedActivities.isEmpty()) {
                 foregroundSinceMs = SystemClock.elapsedRealtime();
             }
+            startedActivities.add(activity);
         }
     }
 
     @Override
     public void onActivityStopped(Activity activity) {
+        markStopped(activity);
+    }
+
+    private void markStopped(Activity activity) {
         synchronized (LvlUpForegroundClock.class) {
-            if (startedActivities == 0) {
+            if (!startedActivities.remove(activity)) {
                 return;
             }
 
-            if (--startedActivities == 0) {
+            if (startedActivities.isEmpty()) {
                 accumulatedMs += Math.max(0, SystemClock.elapsedRealtime() - foregroundSinceMs);
             }
         }
@@ -85,5 +97,6 @@ public final class LvlUpForegroundClock implements Application.ActivityLifecycle
 
     @Override
     public void onActivityDestroyed(Activity activity) {
+        markStopped(activity);
     }
 }

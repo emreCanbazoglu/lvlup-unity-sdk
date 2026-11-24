@@ -77,6 +77,32 @@ namespace LvlUp.Tests
         }
 
         [Test]
+        public void SessionEndingInTheBackgroundKeepsItsTimeAtPause()
+        {
+            var tracker = new SessionForegroundTracker(() => _now, _path);
+            tracker.BeginSession();
+            _now = 90;
+            tracker.MarkPaused();
+            _now = 460;
+
+            Assert.AreEqual(90, tracker.SecondsAtPause);
+        }
+
+        [Test]
+        public void NewSessionForgetsThePreviousPause()
+        {
+            var tracker = new SessionForegroundTracker(() => _now, _path);
+            tracker.BeginSession();
+            _now = 90;
+            tracker.MarkPaused();
+            _now = 100;
+            tracker.BeginSession();
+            _now = 130;
+
+            Assert.AreEqual(30, tracker.SecondsAtPause);
+        }
+
+        [Test]
         public void SnapshotSurvivesARelaunchOnce()
         {
             var tracker = new SessionForegroundTracker(() => _now, _path);

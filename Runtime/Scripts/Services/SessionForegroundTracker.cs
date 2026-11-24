@@ -27,6 +27,7 @@ namespace LvlUp.Services
         private double _sessionStart;
         private double _lastSnapshotAt = double.NegativeInfinity;
         private bool _hasBegunSession;
+        private int? _secondsAtPause;
 
         internal SessionForegroundTracker(Func<double> foregroundClock, string snapshotPath)
         {
@@ -42,9 +43,21 @@ namespace LvlUp.Services
         {
             _sessionStart = _hasBegunSession ? _foregroundClock() : 0;
             _hasBegunSession = true;
+            _secondsAtPause = null;
         }
 
         internal int Seconds => (int)Math.Floor(Math.Max(0, _foregroundClock() - _sessionStart));
+
+        /// <summary>
+        /// On-screen seconds when the app last went to the background, for a session that ends there.
+        /// Reading the clock on resume instead would add whatever the clock counted in between.
+        /// </summary>
+        internal int SecondsAtPause => _secondsAtPause ?? Seconds;
+
+        internal void MarkPaused()
+        {
+            _secondsAtPause = Seconds;
+        }
 
         internal void Tick(string sessionId)
         {

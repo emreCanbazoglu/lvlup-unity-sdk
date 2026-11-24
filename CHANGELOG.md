@@ -5,6 +5,13 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] - 2026-11-24
+
+### Fixed
+- **On Android, on-screen session time no longer counts time in the background.** `LvlUpForegroundClock` counted started activities, starting at one for the activity it was given. That activity could still report its own start afterwards, and the count then never fell back to zero, so the clock ran on while the app was in the background. In It's Cannon Time 1.3.2, a session the player left for 2.5–12 minutes reported the whole time away as on-screen time (a 90-second session reported 460 seconds). Started activities are now tracked by identity, so the same activity is never counted twice, and a destroyed activity counts as stopped.
+- **A session that times out in the background ends with its on-screen time at the moment the app was paused**, not the time read when the player came back.
+- **`LvlUpVersion.Current` reports the package version again.** It stayed at `1.16.1` through 1.17.0 and 1.18.0, so events' `sdkVersion` read `unity 1.16.1` on those versions.
+
 ## [1.18.0] - 2026-11-24
 
 ### Added
