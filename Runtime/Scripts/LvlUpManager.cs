@@ -553,7 +553,17 @@ namespace LvlUp
             {
                 if (Time.realtimeSinceStartup - startTime >= timeoutSeconds)
                 {
-                    Debug.LogWarning($"[LvlUp] Remote config not ready after {timeoutSeconds}s; " +
+                    if (_isInitialized
+                        && _remoteConfigService != null
+                        && (_remoteConfigService.HasLoadedConfigs || _remoteConfigService.TryLoadCachedConfigs()))
+                    {
+                        Debug.LogWarning($"[LvlUp] Remote config not fetched after {timeoutSeconds}s; " +
+                                         "using the last cached configs until the fetch completes.");
+                        onReady?.Invoke(true);
+                        yield break;
+                    }
+
+                    Debug.LogWarning($"[LvlUp] Remote config not ready after {timeoutSeconds}s and no cache; " +
                                      "proceeding without it (values will fall back to defaults).");
                     onReady?.Invoke(false);
                     yield break;

@@ -83,6 +83,12 @@ namespace LvlUp.RemoteConfig
         public Dictionary<string, string> abTests;
         public ConfigDebugData debug;
         public long timestamp;
+
+        /// <summary>
+        /// Set by the SDK when it caches the response: the user ID the configs were fetched for, so a
+        /// cache written for another user is never applied. The backend does not send it.
+        /// </summary>
+        public string cachedForUserId;
     }
 
     [Serializable]

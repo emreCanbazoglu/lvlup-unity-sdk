@@ -5,6 +5,18 @@ All notable changes to the LvlUp Unity SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-11-26
+
+### Fixed
+- **A slow or failed config fetch no longer drops a player out of their A/B arm for the whole launch.** When `Config.WaitUntilReady` / `WaitUntilReadyAsync` timed out, the SDK reported "not ready" and games read their built-in defaults, and the cache was consulted only after all three fetch attempts had failed, which takes far longer than the 15-second wait. In It's Cannon Time, players in the `late_hard_lh1` test arm played the control funnel on about 8% of their level starts this way. On timeout the SDK now loads the last cached configs and A/B assignments and reports ready. A fetch that completes later replaces them, so values a game reads once at startup keep the cached value for that launch, and the next launch starts from the new cache.
+- **The config cache no longer expires.** It was deleted when it was more than 5 minutes old, so a device that relaunched offline after that had no configs at all. The cache now stays until a newer successful fetch replaces it. `IsCached()` still reports whether it was written in the last 5 minutes.
+- A failed refetch no longer replaces configs that are already loaded with the cache, and reports `false`.
+
+### Added
+- `RemoteConfigService.TryLoadCachedConfigs()`: loads the last cached configs when none are loaded yet.
+- Cached configs record the user ID they were fetched for (`ConfigsResponse.cachedForUserId`), and a cache written for a different user is never applied. Caches written by earlier versions have no user ID and are applied.
+- EditMode coverage for the cache fallback.
+
 ## [1.18.1] - 2026-11-24
 
 ### Fixed
