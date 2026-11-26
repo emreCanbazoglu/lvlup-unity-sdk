@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cached configs record the user ID they were fetched for (`ConfigsResponse.cachedForUserId`), and a cache written for a different user is never applied. Caches written by earlier versions have no user ID and are applied.
 - EditMode coverage for the cache fallback.
 
+## [1.18.2] - 2026-11-26
+
+### Fixed
+- **Ad impressions are sent as soon as they are tracked**, instead of waiting up to 30 seconds (`eventFlushInterval`) for the next batch. Players often close the app right after an ad. Since 1.17.0 that impression is saved and resent on the next launch, but it reaches the server only if the player comes back. Matching MAX's impression-level report against LvlUp for It's Cannon Time on 2026-11-25, 42% of each device's last ad impression of the day was missing, while impressions with another ad after them were 95% present. Purchases and events keep the batch interval. Only one revenue request runs at a time: an impression tracked during a send goes out when that send succeeds; after a failed send, revenue waits for the flush interval as before.
+
+### Added
+- `LvlUpConfig.sendAdImpressionsImmediately` (default `true`; also on `LvlUpConfigScriptable`).
+- EditMode coverage for sending ad impressions immediately, one request at a time, and failed sends.
+
 ## [1.18.1] - 2026-11-24
 
 ### Fixed

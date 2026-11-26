@@ -46,6 +46,14 @@ namespace LvlUp
         public bool sendImmediately = false;
 
         /// <summary>
+        /// Send each ad impression as soon as it is tracked instead of waiting for the
+        /// flush interval. Players often close the app right after an ad, and an
+        /// impression still waiting in the batch then reaches the server only if they
+        /// open the game again. Purchases and events keep the normal batching.
+        /// </summary>
+        public bool sendAdImpressionsImmediately = true;
+
+        /// <summary>
         /// Automatically track application pause/resume events
         /// </summary>
         public bool autoTrackAppLifecycle = true;

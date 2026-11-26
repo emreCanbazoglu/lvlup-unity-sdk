@@ -152,7 +152,7 @@ Manually flush the revenue queue to send all pending revenue data to the server 
 LvlUpSDK.Revenue.Flush();
 ```
 
-**Note:** Revenue data is automatically flushed based on batch size and interval configured in `LvlUpConfig`.
+**Note:** Ad impressions are sent as soon as they are tracked (`sendAdImpressionsImmediately`, on by default). Purchases are flushed based on the batch size and interval configured in `LvlUpConfig`.
 
 ### LvlUpSDK.Revenue.QueuedCount
 
@@ -230,6 +230,7 @@ var config = new LvlUpConfig
     eventBatchSize = 20,        // Batch size for revenue data
     eventFlushInterval = 30f,   // Auto-flush interval in seconds
     sendImmediately = false,    // Send immediately or batch
+    sendAdImpressionsImmediately = true, // Send each ad impression at once (default)
     enableGeoTracking = true    // Include geo data in revenue
 };
 

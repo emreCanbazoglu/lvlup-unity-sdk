@@ -30,6 +30,11 @@ namespace LvlUp.Services
         private List<RevenueData> _inFlightBatch = null;
         private bool _hasLoadedPersistedRevenue = false;
         private bool _isSendingRevenue = false;
+        // A flush asked for while a send was running; served as soon as that send succeeds.
+        private bool _flushAfterCurrentSend = false;
+
+        // Test seam: replaces the HTTP send. Receives the batch and a completion callback (true = server has it).
+        internal Action<List<RevenueData>, Action<bool>> SendBatchOverride;
 
         // PlayerPrefs keys for persistence
         private const string PREF_OFFLINE_REVENUE = "LvlUp_OfflineRevenue";
@@ -146,8 +151,10 @@ namespace LvlUp.Services
                 Debug.Log($"[LvlUp] Revenue queued: {type} ${revenueData.revenue:F4} (Batch: {_revenueBatch.Count})");
             }
 
-            // Check if we need to flush
-            if (_revenueBatch.Count >= _config.eventBatchSize)
+            // Ad impressions go out at once: players often close the app right after an ad, and an
+            // impression still waiting for the flush interval then arrives only if they come back.
+            bool sendNow = revenueData.revenueType == "AD_IMPRESSION" && _config.sendAdImpressionsImmediately;
+            if (sendNow || _revenueBatch.Count >= _config.eventBatchSize)
             {
                 FlushRevenueQueue();
             }
@@ -220,10 +227,20 @@ namespace LvlUp.Services
         /// </summary>
         public void FlushRevenueQueue()
         {
-            if (_revenueBatch.Count == 0 || _isSendingRevenue)
+            if (_revenueBatch.Count == 0)
+                return;
+
+            if (_isSendingRevenue)
+            {
+                _flushAfterCurrentSend = true;
+                return;
+            }
+
+            if (SendBatchOverride == null && (_coroutineRunner == null || _httpClient == null))
                 return;
 
             _isSendingRevenue = true;
+            _flushAfterCurrentSend = false;
 
             _inFlightBatch = new List<RevenueData>(_revenueBatch);
             _revenueBatch.Clear();
@@ -231,7 +248,11 @@ namespace LvlUp.Services
             if (_config.enableDebugLogs)
                 Debug.Log($"[LvlUp] Flushing revenue batch: {_inFlightBatch.Count} items");
 
-            _coroutineRunner.StartCoroutine(SendRevenueBatch(_inFlightBatch));
+            var batch = _inFlightBatch;
+            if (SendBatchOverride != null)
+                SendBatchOverride(batch, success => OnRevenueBatchSent(batch, success));
+            else
+                _coroutineRunner.StartCoroutine(SendRevenueBatch(batch));
         }
 
         /// <summary>
@@ -440,14 +461,22 @@ namespace LvlUp.Services
                 else
                 {
                     Debug.LogWarning($"[LvlUp] Failed to send revenue batch: {response.error}");
-
-                    // Re-queue failed events for retry
-                    _revenueBatch.InsertRange(0, batch);
-                    EnforceRevenueQueueCap();
                 }
             });
 
             yield return new WaitUntil(() => requestComplete);
+
+            OnRevenueBatchSent(batch, requestSuccess);
+        }
+
+        private void OnRevenueBatchSent(List<RevenueData> batch, bool success)
+        {
+            if (!success)
+            {
+                // Re-queue failed items for retry
+                _revenueBatch.InsertRange(0, batch);
+                EnforceRevenueQueueCap();
+            }
 
             _inFlightBatch = null;
             _isSendingRevenue = false;
@@ -457,8 +486,12 @@ namespace LvlUp.Services
             // clears stale data; on failure this persists the re-queued items.
             SyncPersistedState();
 
-            // If there are more items in the batch, flush again
-            if (_revenueBatch.Count >= _config.eventBatchSize)
+            // Revenue tracked during a successful send goes out now. After a failure it waits for the
+            // flush interval or the next impression, so an offline device does not retry in a loop.
+            bool flushRequested = _flushAfterCurrentSend;
+            _flushAfterCurrentSend = false;
+
+            if (_revenueBatch.Count >= _config.eventBatchSize || (success && flushRequested))
             {
                 FlushRevenueQueue();
             }
