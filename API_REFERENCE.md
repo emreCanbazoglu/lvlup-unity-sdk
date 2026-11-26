@@ -430,6 +430,7 @@ public class LvlUpConfig
     public int retryAttempts = 3;
     public float timeout = 30f;
     public bool sendImmediately = false;
+    public bool sendAdImpressionsImmediately = true;
     public bool autoTrackAppLifecycle = true;
     public bool enableGeoTracking = false;
     public bool autoTrackScenes = false;
@@ -450,6 +451,7 @@ public class LvlUpConfig
 - **retryAttempts**: Number of retry attempts for failed requests
 - **timeout**: Request timeout in seconds
 - **sendImmediately**: Send events immediately instead of batching
+- **sendAdImpressionsImmediately**: Send each ad impression as soon as it is tracked, so it reaches the server even if the player closes the app right after the ad (default `true`). Purchases and events keep the batch interval
 - **autoTrackAppLifecycle**: Track app pause/resume events
 - **enableGeoTracking**: Enable automatic geographic location tracking
 - **autoTrackScenes**: Automatically track scene changes
