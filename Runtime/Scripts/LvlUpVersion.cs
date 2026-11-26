@@ -14,6 +14,6 @@ namespace LvlUp
         /// <summary>
         /// Current SDK version. Must match the "version" field in package.json.
         /// </summary>
-        public const string Current = "1.18.2";
+        public const string Current = "1.19.0";
     }
 }

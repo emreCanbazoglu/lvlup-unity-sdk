@@ -51,6 +51,15 @@ namespace LvlUp.Services
 
         #region Initialization
 
+        public RemoteConfigService()
+        {
+        }
+
+        internal RemoteConfigService(RemoteConfigCacheService cacheService)
+        {
+            _cacheService = cacheService;
+        }
+
         /// <summary>
         /// Initialize Remote Config Service
         /// Uses API key from LvlUpHttpClient - backend identifies game from API key
@@ -70,7 +79,8 @@ namespace LvlUp.Services
             try
             {
                 // Initialize cache service - uses a generic cache key since backend handles game identification
-                _cacheService = new RemoteConfigCacheService("default");
+                if (_cacheService == null)
+                    _cacheService = new RemoteConfigCacheService("default");
 
                 _isInitialized = true;
 
@@ -280,18 +290,50 @@ namespace LvlUp.Services
                 }
             }
 
-            // All retries failed, try to load from cache
             Debug.Log("[LvlUp] All fetch attempts failed, trying cache...");
-            if (_cacheService.TryLoadConfigs(GetCurrentEnvironment(), out var cachedConfigsResponse))
+            if (TryLoadCachedConfigs())
             {
-                ProcessConfigsResponse(cachedConfigsResponse, isFromCache: true);
                 EndFetch(coroutineRunner, true, onComplete);
             }
             else
             {
-                Debug.LogError("[LvlUp] Failed to fetch configs and no valid cache available");
+                Debug.LogError(_hasLoadedConfigs
+                    ? "[LvlUp] Failed to fetch configs, keeping the configs already loaded"
+                    : "[LvlUp] Failed to fetch configs and no cache available");
                 EndFetch(coroutineRunner, false, onComplete);
             }
+        }
+
+        /// <summary>
+        /// Load the last cached configs if no configs are loaded yet. The cache has no age limit,
+        /// and one written for a different user is ignored. A later successful fetch replaces what
+        /// this loads. Returns true only when it loaded configs.
+        /// </summary>
+        public bool TryLoadCachedConfigs()
+        {
+            if (!_isInitialized
+                || _hasLoadedConfigs)
+                return false;
+
+            if (!_cacheService.TryLoadConfigs(GetCurrentEnvironment(), out var cachedConfigsResponse))
+                return false;
+
+            if (!IsCacheForCurrentUser(cachedConfigsResponse))
+            {
+                Debug.Log("[LvlUp] Cached configs belong to another user, ignoring them");
+                return false;
+            }
+
+            ProcessConfigsResponse(cachedConfigsResponse, isFromCache: true);
+
+            return _hasLoadedConfigs;
+        }
+
+        private bool IsCacheForCurrentUser(ConfigsResponse cachedConfigsResponse)
+        {
+            return string.IsNullOrEmpty(cachedConfigsResponse.cachedForUserId)
+                   || string.IsNullOrEmpty(_contextUserId)
+                   || cachedConfigsResponse.cachedForUserId == _contextUserId;
         }
 
         public void FetchAbDebugCatalogAsync(MonoBehaviour coroutineRunner, Action<bool, List<AbDebugLayer>> onComplete = null)
@@ -350,8 +392,8 @@ namespace LvlUp.Services
             List<ConfigData> configList = new List<ConfigData>(configsResponse.configs);
 
             // Process the configs
-            // Cached responses must not be re-saved: that would reset the cache file's age and keep
-            // stale configs alive past the TTL.
+            // Cached responses are not re-saved: the cache file's age has to stay the age of the
+            // last successful fetch.
             ProcessConfigs(configList, configsResponse, isFromCache);
         }
 
@@ -381,6 +423,7 @@ namespace LvlUp.Services
             // overridden (e.g. development) response never lands in the production cache.
             if (!isFromCache && configsResponse != null && !_currentAbTestsForced)
             {
+                configsResponse.cachedForUserId = _contextUserId;
                 _cacheService.SaveConfigs(configsResponse, GetCurrentEnvironment());
             }
 

@@ -19,9 +19,14 @@ namespace LvlUp.RemoteConfig
         private string _cacheDirectory;
 
         public RemoteConfigCacheService(string gameId)
+            : this(gameId, Path.Combine(Application.persistentDataPath, CACHE_FOLDER))
+        {
+        }
+
+        internal RemoteConfigCacheService(string gameId, string cacheDirectory)
         {
             _gameId = gameId;
-            _cacheDirectory = Path.Combine(Application.persistentDataPath, CACHE_FOLDER);
+            _cacheDirectory = cacheDirectory;
             
             // Create cache directory if it doesn't exist
             try
@@ -60,7 +65,9 @@ namespace LvlUp.RemoteConfig
         }
 
         /// <summary>
-        /// Load configs from cache file if valid
+        /// Load the last configs saved for this environment, whatever their age. They stay on disk
+        /// until a newer fetch replaces them, so a device that has been offline for days still
+        /// starts with its last known values and A/B assignments.
         /// </summary>
         public bool TryLoadConfigs(string environment, out ConfigsResponse configsResponse)
         {
@@ -73,14 +80,6 @@ namespace LvlUp.RemoteConfig
                 if (!File.Exists(cacheFilePath))
                 {
                     Debug.Log("[LvlUp] No cached configs file found");
-                    return false;
-                }
-
-                // Check if cache is expired
-                if (!IsValidCache(environment))
-                {
-                    Debug.Log("[LvlUp] Cached configs expired");
-                    ClearCache(environment);
                     return false;
                 }
 
@@ -104,7 +103,8 @@ namespace LvlUp.RemoteConfig
         }
 
         /// <summary>
-        /// Check if cache is still valid (not expired and matches environment)
+        /// Whether the cache for this environment was written within the last 5 minutes. Loading
+        /// does not depend on this: <see cref="TryLoadConfigs"/> reads a cache of any age.
         /// </summary>
         public bool IsValidCache(string environment)
         {
