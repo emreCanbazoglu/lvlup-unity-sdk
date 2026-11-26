@@ -48,6 +48,9 @@ namespace LvlUp
         [Tooltip("Send events immediately instead of batching")]
         public bool sendImmediately = false;
 
+        [Tooltip("Send each ad impression as soon as it is tracked, so it reaches the server even if the player closes the app right after the ad")]
+        public bool sendAdImpressionsImmediately = true;
+
         [Header("Persistence")]
         [Tooltip("Persist event queue to disk for offline support")]
         public bool persistQueueToDisk = true;
@@ -91,6 +94,7 @@ namespace LvlUp
                 retryAttempts = this.retryAttempts,
                 timeout = this.timeout,
                 sendImmediately = this.sendImmediately,
+                sendAdImpressionsImmediately = this.sendAdImpressionsImmediately,
                 autoTrackAppLifecycle = this.autoTrackAppLifecycle,
                 enableGeoTracking = this.enableGeoTracking,
                 autoTrackScenes = this.autoTrackScenes,
